@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+<title>MarifoonPilot</title>
+<meta name="description" content="GPS-vaarassistent die automatisch het juiste marifoonkanaal adviseert op het IJsselmeer, Markermeer en de Waddenzee." />
+<meta name="theme-color" content="#0a2540" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="MarifoonPilot" />
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+<style>
+  :root{
+    --bg:#0a2540; --panel:#0f3157; --panel2:#12395f; --line:#1d4b78;
+    --text:#eaf2fb; --muted:#9fb8d4; --accent:#2f9be0;
+    --ok:#1f9d55; --ok2:#15803d; --warn:#d99400; --warn2:#b45309;
+    --alert:#d43d3d; --alert2:#991b1b;
+    --state:var(--ok); --state2:var(--ok2);
+    --safe-t:env(safe-area-inset-top); --safe-b:env(safe-area-inset-bottom);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-user-select:none;user-select:none;overscroll-behavior:none}
+  #app{display:flex;flex-direction:column;height:100dvh;height:100vh}
+
+  /* ---------- Top status bar ---------- */
+  header{padding:calc(var(--safe-t) + 8px) 12px 8px;background:linear-gradient(180deg,var(--state2),var(--state));
+    transition:background .5s ease;flex:0 0 auto}
+  .hrow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .brand{font-weight:800;font-size:15px;letter-spacing:.3px;display:flex;align-items:center;gap:7px}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:#fff;opacity:.85;box-shadow:0 0 0 3px rgba(255,255,255,.2)}
+  .gps{font-size:11px;color:#eaf2fb;opacity:.9;display:flex;align-items:center;gap:5px}
+  .gps b{font-weight:700}
+  .gdot{width:9px;height:9px;border-radius:50%;background:#ffcc00;box-shadow:0 0 6px rgba(255,255,255,.4)}
+  .gdot.good{background:#8ef58e}.gdot.none{background:#ff6b6b}
+
+  /* ---------- Views ---------- */
+  main{flex:1 1 auto;position:relative;overflow:hidden}
+  .view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;padding:14px 14px calc(var(--safe-b) + 14px)}
+  .view.active{display:block}
+  #view-map.active{display:block;padding:0}
+  #map{position:absolute;inset:0}
+
+  /* ---------- Varen (main) ---------- */
+  .big-channel{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+    border-radius:20px;padding:18px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.35);position:relative;overflow:hidden}
+  .big-channel::after{content:"";position:absolute;inset:0;border-radius:20px;pointer-events:none;
+    box-shadow:inset 0 0 0 2px var(--state);opacity:.55;transition:box-shadow .4s}
+  .bc-label{font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .bc-num{font-size:clamp(72px,26vw,150px);font-weight:900;line-height:.95;margin:2px 0 2px;
+    letter-spacing:-2px;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.4)}
+  .bc-num small{font-size:.22em;vertical-align:.9em;color:var(--muted);letter-spacing:0;font-weight:700}
+  .bc-post{font-size:clamp(18px,5.5vw,26px);font-weight:800;color:#fff}
+  .bc-reason{font-size:14px;color:var(--muted);margin-top:6px;line-height:1.35}
+  .bc-dist{margin-top:10px;font-size:15px;font-weight:700;color:#fff;
+    background:rgba(255,255,255,.10);display:inline-block;padding:6px 14px;border-radius:999px}
+  .btn-ack{margin-top:12px;display:none;width:100%;padding:14px;border:0;border-radius:14px;
+    background:#fff;color:var(--alert2);font-weight:900;font-size:17px}
+  .big-channel.needsack .btn-ack{display:block}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .tile .k{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:700}
+  .tile .v{font-size:26px;font-weight:800;margin-top:2px}
+  .tile .v small{font-size:13px;color:var(--muted);font-weight:600}
+
+  .next{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:12px 14px;display:flex;align-items:center;gap:12px}
+  .next .ico{font-size:22px}
+  .next .t{flex:1}
+  .next .t .a{font-weight:800;font-size:15px}
+  .next .t .b{font-size:13px;color:var(--muted);margin-top:2px}
+  .next .ch{font-weight:900;font-size:22px;background:rgba(47,155,224,.18);color:#bfe2fb;
+    border-radius:12px;padding:6px 12px;min-width:52px;text-align:center}
+
+  .hint{color:var(--muted);font-size:12.5px;text-align:center;margin:14px 4px 2px;line-height:1.4}
+  .start-btn{display:block;width:100%;margin-top:14px;padding:16px;border:0;border-radius:16px;
+    background:var(--accent);color:#fff;font-size:17px;font-weight:800;box-shadow:0 6px 18px rgba(47,155,224,.4)}
+  .start-btn.secondary{background:var(--panel);border:1px solid var(--line);box-shadow:none;margin-top:10px}
+
+  /* ---------- Auto (giant) ---------- */
+  #view-auto{background:#000;padding:0}
+  #view-auto.active{display:flex;flex-direction:column}
+  .auto-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:16px;background:var(--state2)}
+  .auto-lab{font-size:16px;letter-spacing:4px;color:rgba(255,255,255,.8);font-weight:800;text-transform:uppercase}
+  .auto-num{font-size:min(52vw,60vh);font-weight:900;line-height:.85;color:#fff}
+  .auto-post{font-size:clamp(22px,7vw,46px);font-weight:800;color:#fff;margin-top:4px}
+  .auto-dist{font-size:clamp(18px,5vw,30px);color:rgba(255,255,255,.85);font-weight:700;margin-top:10px}
+  .auto-exit{position:absolute;top:calc(var(--safe-t) + 10px);right:12px;background:rgba(0,0,0,.35);
+    color:#fff;border:0;border-radius:12px;padding:10px 14px;font-weight:700;font-size:14px}
+
+  /* ---------- Reference / safety ---------- */
+  h2.sec{font-size:14px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin:18px 4px 8px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--line)}
+  .row:first-child{border-top:0}
+  .row .name{flex:1}
+  .row .name .a{font-weight:700;font-size:15px}
+  .row .name .b{font-size:12.5px;color:var(--muted);margin-top:1px}
+  .row .chan{font-weight:900;font-size:20px;color:#bfe2fb;background:rgba(47,155,224,.16);
+    border-radius:10px;padding:5px 12px;min-width:48px;text-align:center}
+  .row .chan.red{color:#ffd4d4;background:rgba(212,61,61,.22)}
+  .emg{background:linear-gradient(180deg,#3a1414,#2a0f0f);border:1px solid #6b2323}
+  .emg .row{border-top-color:#5a2020}
+  .emg .chan.red{color:#ffdada;background:rgba(212,61,61,.3)}
+
+  /* ---------- Settings ---------- */
+  .set{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px;
+    border-top:1px solid var(--line)}
+  .set:first-child{border-top:0}
+  .set .lab{font-weight:600;font-size:15px}
+  .set .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .switch{position:relative;width:52px;height:30px;flex:0 0 auto}
+  .switch input{opacity:0;width:0;height:0}
+  .slider{position:absolute;inset:0;background:#274b70;border-radius:999px;transition:.2s}
+  .slider::before{content:"";position:absolute;height:24px;width:24px;left:3px;top:3px;background:#fff;
+    border-radius:50%;transition:.2s}
+  .switch input:checked + .slider{background:var(--accent)}
+  .switch input:checked + .slider::before{transform:translateX(22px)}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  select{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;
+    padding:9px 10px;font-size:15px}
+  .rangeval{font-weight:800;color:#bfe2fb;min-width:78px;text-align:right}
+
+  /* ---------- Bottom nav ---------- */
+  nav{flex:0 0 auto;display:flex;background:#08213b;border-top:1px solid var(--line);
+    padding-bottom:var(--safe-b)}
+  nav button{flex:1;background:none;border:0;color:var(--muted);padding:9px 2px 8px;font-size:10.5px;
+    font-weight:700;display:flex;flex-direction:column;align-items:center;gap:3px}
+  nav button .ni{font-size:20px;line-height:1}
+  nav button.active{color:#fff}
+  nav button.active .ni{filter:drop-shadow(0 0 6px rgba(47,155,224,.7))}
+
+  /* ---------- Toast / alert banner ---------- */
+  #toast{position:fixed;left:12px;right:12px;top:calc(var(--safe-t) + 8px);z-index:1200;
+    background:var(--alert);color:#fff;border-radius:16px;padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.5);
+    transform:translateY(-160%);transition:transform .35s cubic-bezier(.2,.9,.3,1);display:flex;gap:12px;align-items:flex-start}
+  #toast.show{transform:translateY(0)}
+  #toast .ti{font-size:24px;line-height:1}
+  #toast .tt{flex:1}
+  #toast .tt .h{font-weight:900;font-size:16px}
+  #toast .tt .p{font-size:14px;margin-top:2px;line-height:1.35}
+  #toast button{background:rgba(255,255,255,.2);border:0;color:#fff;font-weight:800;border-radius:10px;
+    padding:8px 12px;font-size:14px}
+
+  /* ---------- Modal ---------- */
+  .modal{position:fixed;inset:0;z-index:1500;background:rgba(3,12,24,.82);display:none;
+    align-items:center;justify-content:center;padding:18px}
+  .modal.show{display:flex}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:20px;max-width:460px;width:100%;
+    padding:20px;max-height:86dvh;overflow-y:auto}
+  .modal h3{margin:0 0 8px;font-size:20px}
+  .modal p{color:var(--muted);font-size:14px;line-height:1.5;margin:8px 0}
+  .modal .ok{width:100%;margin-top:14px;padding:14px;border:0;border-radius:14px;background:var(--accent);
+    color:#fff;font-weight:800;font-size:16px}
+  .modal ul{color:var(--muted);font-size:14px;line-height:1.6;padding-left:20px;margin:8px 0}
+
+  .simbadge{position:absolute;top:calc(var(--safe-t) + 4px);left:50%;transform:translateX(-50%);
+    background:var(--warn);color:#3a2600;font-weight:900;font-size:11px;letter-spacing:.5px;
+    padding:4px 10px;border-radius:999px;z-index:600;display:none}
+  body.sim .simbadge{display:block}
+  .leaflet-control-attribution{font-size:9px}
+  .maptools{position:absolute;right:10px;bottom:16px;z-index:600;display:flex;flex-direction:column;gap:8px}
+  .maptools button{width:46px;height:46px;border-radius:14px;border:1px solid var(--line);
+    background:rgba(10,37,64,.9);color:#fff;font-size:20px;font-weight:800}
+  .layerpick{position:absolute;left:10px;bottom:16px;z-index:600}
+  .layerpick select{background:rgba(10,37,64,.92)}
+
+  /* ---------- Nachtmodus (rood/dim, spaart nachtzicht) ---------- */
+  body.night{--bg:#0a0000;--panel:#160303;--panel2:#1c0505;--line:#3a0d0d;
+    --text:#ffd3cf;--muted:#c98a86;--accent:#e0552f;
+    --ok:#8a2b1e;--ok2:#5c1c14;--warn:#b5651d;--warn2:#7a410f;--alert:#e0442f;--alert2:#8a1c10}
+  body.night nav{background:#100000}
+  body.night .bc-num,body.night .bc-post,body.night .auto-num,body.night .auto-post{color:#ffb3ac;text-shadow:none}
+  body.night img,body.night #map{filter:brightness(.7) sepia(.4) hue-rotate(-30deg) saturate(1.3)}
+  body.night .start-btn{background:#7a2a17}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="hrow">
+      <div class="brand"><span class="dot"></span> MarifoonPilot</div>
+      <div class="gps"><span class="gdot none" id="gdot"></span><span id="gpsInfo">GPS uit</span></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- VAREN -->
+    <section id="view-varen" class="view active">
+      <div class="big-channel" id="bigChannel">
+        <div class="bc-label" id="bcLabel">Aanbevolen marifoon</div>
+        <div class="bc-num" id="bcNum">–</div>
+        <div class="bc-post" id="bcPost">Start GPS om te beginnen</div>
+        <div class="bc-reason" id="bcReason">De app adviseert automatisch het juiste kanaal op basis van je positie.</div>
+        <div class="bc-dist" id="bcDist" style="display:none"></div>
+        <button class="btn-ack" id="btnAck">Begrepen – kanaal gewijzigd</button>
+      </div>
+
+      <div class="next" id="nextBox" style="display:none">
+        <div class="ico">➡️</div>
+        <div class="t"><div class="a" id="nextName">–</div><div class="b" id="nextMeta">–</div></div>
+        <div class="ch" id="nextCh">–</div>
+      </div>
+
+      <div class="grid">
+        <div class="tile"><div class="k">Snelheid</div><div class="v"><span id="sog">–</span> <small>kn</small></div></div>
+        <div class="tile"><div class="k">Koers</div><div class="v"><span id="cog">–</span><small>°</small></div></div>
+      </div>
+
+      <button class="start-btn" id="btnStart">GPS starten</button>
+      <button class="start-btn secondary" id="btnSim">Simulatie: tik op de kaart om te testen</button>
+      <div class="hint" id="disclaimerHint">⚠️ Indicatieve hulp. Controleer kanalen altijd bij de officiële bron (Wateralmanak / vaarweginformatie.nl). Marifoon nooit vervangen door deze app.</div>
+    </section>
+
+    <!-- KAART -->
+    <section id="view-map" class="view">
+      <div id="map"></div>
+      <div class="simbadge">SIMULATIE — tik op de kaart</div>
+      <div class="layerpick">
+        <select id="layerSel">
+          <option value="osm">Kaart (OSM)</option>
+          <option value="seamap">Zeekaart (OpenSeaMap)</option>
+          <option value="sat">Satelliet</option>
+        </select>
+      </div>
+      <div class="maptools">
+        <button id="btnLocate" title="Centreer op mij">🎯</button>
+        <button id="btnSimMap" title="Simulatie aan/uit">🧭</button>
+      </div>
+    </section>
+
+    <!-- KANALEN / REFERENTIE -->
+    <section id="view-ref" class="view">
+      <h2 class="sec">🚨 Nood- &amp; oproepkanalen</h2>
+      <div class="card emg" id="emgList"></div>
+      <h2 class="sec">📻 Verkeersposten (VTS &amp; meldposten)</h2>
+      <div class="card" id="vtsList"></div>
+      <h2 class="sec">⚓ Sluizen &amp; bruggen</h2>
+      <div class="card" id="lockList"></div>
+      <h2 class="sec">🏠 Havens (oproep)</h2>
+      <div class="card" id="harborList"></div>
+      <div class="hint">Bron: Nautin, Waterkaart, Rijkswaterstaat Vaarweginformatie. Kanalen kunnen wijzigen — controleer de actuele Wateralmanak.</div>
+    </section>
+
+    <!-- INSTELLINGEN -->
+    <section id="view-set" class="view">
+      <h2 class="sec">Waarschuwingen</h2>
+      <div class="card">
+        <div class="set">
+          <div><div class="lab">Waarschuwingsafstand</div><div class="sub">Meld kanaalwissel zoveel meter vóór een sluis/brug.</div></div>
+          <div class="rangeval" id="warnVal">700 m</div>
+        </div>
+        <div class="set" style="border-top:0;padding-top:0"><input type="range" id="warnRange" min="250" max="2000" step="50" value="700"></div>
+        <div class="set"><div><div class="lab">Geluidssignaal</div><div class="sub">Toon bij kanaalwissel.</div></div>
+          <label class="switch"><input type="checkbox" id="setSound" checked><span class="slider"></span></label></div>
+        <div class="set"><div><div class="lab">Trillen</div><div class="sub">Trilsignaal bij melding (indien ondersteund).</div></div>
+          <label class="switch"><input type="checkbox" id="setVibe" checked><span class="slider"></span></label></div>
+        <div class="set"><div><div class="lab">Systeemmelding</div><div class="sub">Pushmelding tonen (vraagt toestemming).</div></div>
+          <label class="switch"><input type="checkbox" id="setNotify" checked><span class="slider"></span></label></div>
+      </div>
+
+      <h2 class="sec">Weergave</h2>
+      <div class="card">
+        <div class="set"><div><div class="lab">Thema</div><div class="sub">Nachtmodus is rustiger voor de ogen in het donker.</div></div>
+          <select id="setTheme"><option value="auto">Automatisch</option><option value="day">Dag</option><option value="night">Nacht</option></select></div>
+        <div class="set"><div><div class="lab">Scherm aan houden</div><div class="sub">Voorkomt dat het scherm uitgaat tijdens het varen.</div></div>
+          <label class="switch"><input type="checkbox" id="setWake"><span class="slider"></span></label></div>
+      </div>
+
+      <h2 class="sec">Test</h2>
+      <div class="card">
+        <div class="set"><div><div class="lab">Simulatiemodus</div><div class="sub">Tik op de kaart om een positie te kiezen — test zonder op het water te zijn.</div></div>
+          <label class="switch"><input type="checkbox" id="setSim"><span class="slider"></span></label></div>
+        <div class="set"><div><div class="lab">Test-melding</div><div class="sub">Speel een voorbeeldwaarschuwing af.</div></div>
+          <button class="row" id="btnTestAlert" style="background:var(--accent);border:0;color:#fff;font-weight:800;border-radius:10px;padding:9px 14px">Test</button></div>
+      </div>
+
+      <h2 class="sec">App</h2>
+      <div class="card">
+        <div class="set"><div><div class="lab">Over MarifoonPilot</div><div class="sub">Uitleg, bronnen &amp; disclaimer.</div></div>
+          <button class="row" id="btnAbout" style="background:var(--panel2);border:1px solid var(--line);color:#fff;font-weight:700;border-radius:10px;padding:9px 14px">Open</button></div>
+        <div class="set"><div><div class="lab">Installeren als app</div><div class="sub">Zet op beginscherm (Android &amp; iPhone).</div></div>
+          <button class="row" id="btnInstall" style="background:var(--panel2);border:1px solid var(--line);color:#fff;font-weight:700;border-radius:10px;padding:9px 14px">Uitleg</button></div>
+      </div>
+      <div class="hint">Versie 1.0 · offline-capabel · gemaakt voor IJsselmeer, Markermeer &amp; Waddenzee.</div>
+    </section>
+  </main>
+
+  <nav>
+    <button data-view="varen" class="active"><span class="ni">📻</span>Varen</button>
+    <button data-view="map"><span class="ni">🗺️</span>Kaart</button>
+    <button data-view="auto"><span class="ni">🔆</span>Groot</button>
+    <button data-view="ref"><span class="ni">📋</span>Kanalen</button>
+    <button data-view="set"><span class="ni">⚙️</span>Instel</button>
+  </nav>
+</div>
+
+<!-- Auto (giant) view -->
+<section id="view-auto" class="view">
+  <button class="auto-exit" id="autoExit">✕ Sluiten</button>
+  <div class="auto-wrap">
+    <div class="auto-lab" id="autoLab">Marifoon</div>
+    <div class="auto-num" id="autoNum">–</div>
+    <div class="auto-post" id="autoPost">–</div>
+    <div class="auto-dist" id="autoDist"></div>
+  </div>
+</section>
+
+<!-- Toast -->
+<div id="toast">
+  <div class="ti" id="toastIco">🔔</div>
+  <div class="tt"><div class="h" id="toastH">Melding</div><div class="p" id="toastP"></div></div>
+  <button id="toastOk">OK</button>
+</div>
+
+<!-- Modal -->
+<div class="modal" id="modal">
+  <div class="box" id="modalBox"></div>
+</div>
+
+<audio id="chime" preload="auto"></audio>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
