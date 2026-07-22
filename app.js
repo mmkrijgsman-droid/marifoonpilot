@@ -6,7 +6,7 @@ const DEFAULTS = {
   distMode:null, distFactor:null,        // null = automatisch (per apparaat)
   theme:"auto", wake:false,
   warn:700, lookahead:true, sound:true, vibe:true, notify:true,
-  draft:1.2, margin:0.4,
+  draft:1.55, margin:0.4,
   anchorRadius:40, sim:false, seenIntro:false
 };
 let S = load();
@@ -42,7 +42,15 @@ function compass(deg){ return ["N","NO","O","ZO","Z","ZW","W","NW"][Math.round(d
 /* ---------------- Toestand ---------------- */
 let pos=null, prevPos=null, watchId=null, wakeLock=null;
 let lastKey=null, needsAck=false;
-let depth={ loaded:false, points:[], meta:null, status:"none" };
+let depth={ loaded:false, points:[], meta:null, status:"none", index:null };
+const DEPTH_BUCKET=0.01, DEPTH_SNAP=200;
+function buildDepthIndex(){
+  depth.index=new Map();
+  depth.points.forEach((p,i)=>{
+    const k=Math.round(p.lat/DEPTH_BUCKET)+","+Math.round(p.lon/DEPTH_BUCKET);
+    let a=depth.index.get(k); if(!a){ a=[]; depth.index.set(k,a); } a.push(i);
+  });
+}
 let anchor={ set:false, pos:null, active:false, breached:false, outsideSince:null, marker:null, circle:null };
 const ANCHOR_HYST=0.85, ANCHOR_DWELL=8000;
 
@@ -63,10 +71,14 @@ function warnDistance(){
 
 /* ---------------- Diepte ---------------- */
 function nearestDepth(){
-  if(!depth.points.length || !pos) return null;
+  if(!depth.points.length || !pos || !depth.index) return null;
+  const gx=Math.round(pos.lat/DEPTH_BUCKET), gy=Math.round(pos.lon/DEPTH_BUCKET);
   let best=null, bd=Infinity;
-  for(const p of depth.points){ const d=haversine(pos.lat,pos.lon,p.lat,p.lon); if(d<bd){bd=d;best=p;} }
-  return bd<=150 ? {depth:best.depth, dist:bd} : null;
+  for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){
+    const a=depth.index.get((gx+dx)+","+(gy+dy)); if(!a) continue;
+    for(const i of a){ const p=depth.points[i]; const d=haversine(pos.lat,pos.lon,p.lat,p.lon); if(d<bd){bd=d;best=p;} }
+  }
+  return best && bd<=DEPTH_SNAP ? {depth:best.depth, dist:bd} : null;
 }
 
 /* ---------------- Kernadvies ---------------- */
@@ -351,17 +363,26 @@ document.addEventListener("fullscreenchange",fsState);
 document.addEventListener("webkitfullscreenchange",fsState);
 
 /* ---------------- Diepte laden ---------------- */
+function applyDepthData(gj){
+  if(gj.type!=="FeatureCollection"||!Array.isArray(gj.features)) throw new Error("Geen geldige GeoJSON FeatureCollection");
+  const pts=gj.features.filter(f=>f.geometry?.type==="Point" && typeof f.properties?.depth==="number")
+    .map(f=>({lon:f.geometry.coordinates[0],lat:f.geometry.coordinates[1],depth:f.properties.depth}));
+  if(!pts.length) throw new Error("Geen dieptepunten gevonden");
+  depth.points=pts; depth.meta=gj.properties||{}; depth.loaded=true; depth.status="loaded";
+  buildDepthIndex();
+  $("depthStatus").textContent="Geladen: "+pts.length+" dieptepunten"+(depth.meta.source?(" · "+depth.meta.source):"")+(depth.meta.datum?(" · reductievlak "+depth.meta.datum):"");
+  if(pos) render();
+}
 async function loadDepthFile(file){
+  try{ applyDepthData(JSON.parse(await file.text())); }
+  catch(e){ $("depthStatus").textContent="Kon bestand niet laden: "+e.message; }
+}
+async function tryAutoDepth(){
   try{
-    const gj=JSON.parse(await file.text());
-    if(gj.type!=="FeatureCollection"||!Array.isArray(gj.features)) throw new Error("Geen geldige GeoJSON FeatureCollection");
-    const pts=gj.features.filter(f=>f.geometry?.type==="Point" && typeof f.properties?.depth==="number")
-      .map(f=>({lon:f.geometry.coordinates[0],lat:f.geometry.coordinates[1],depth:f.properties.depth}));
-    if(!pts.length) throw new Error("Geen dieptepunten gevonden");
-    depth.points=pts; depth.meta=gj.properties||{}; depth.loaded=true; depth.status="loaded";
-    $("depthStatus").textContent="Geladen: "+pts.length+" dieptepunten"+(depth.meta.source?(" · "+depth.meta.source):"")+(depth.meta.datum?(" · reductievlak "+depth.meta.datum):"");
-    if(pos) render();
-  }catch(e){ $("depthStatus").textContent="Kon bestand niet laden: "+e.message; }
+    const res=await fetch("depth/diepte.geojson",{cache:"force-cache"});
+    if(!res.ok) return;
+    applyDepthData(await res.json());
+  }catch(e){ /* geen meegeleverde dieptedata — geen probleem */ }
 }
 
 /* ---------------- Navigatie ---------------- */
@@ -474,5 +495,6 @@ window.addEventListener("DOMContentLoaded",()=>{
     if(v==="sat"){ baseLayers.sat.addTo(map); curBase="sat"; } else { baseLayers.osm.addTo(map); curBase="osm"; if(v==="seamap") seamark.addTo(map); } });
 
   if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+  tryAutoDepth();
   if(!S.seenIntro){ openModal(INTRO_HTML); S.seenIntro=true; save(); }
 });

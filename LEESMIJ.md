@@ -44,6 +44,21 @@ Sta locatie toe op **"altijd/tijdens gebruik"** voor de beste werking op het wat
 
 ---
 
+## Dieptedata (kielspeling)
+
+De app wordt geleverd **mét dieptedata voor de hele Waddenzee** (ruim 76.000 officiële lodingen
+uit de Inland ENC / S-57 zeekaarten, uitgedund tot ~150 m, per vak de ondiepste loding). Die
+laadt automatisch — je hoeft niets te doen. Zet je eigen diepgang goed (Instellingen → Diepte),
+dan zie je de kielspeling en krijg je een waarschuwing als die onder je marge komt.
+
+Let op de Waddenzee: die dieptes zijn t.o.v. het reductievlak (LAT) en **de echte diepte wisselt
+met het getij** — gebruik het indicatief, tussen de tijen door, nooit als navigatie.
+
+**IJsselmeer / Markermeer / Randmeren:** hiervoor zit (nog) geen vlakdekkende diepte in de app.
+De vrij beschikbare zeekaarten bevatten daar alleen vaargeul-dieptes, geen open-water bathymetrie.
+Wil je dat toch, dan is de bron de Rijkswaterstaat-dieptekaart (`bodemhoogte_20mtr.tif`) — zie
+hieronder hoe je die omzet.
+
 ## Eigen dieptedata toevoegen (optioneel)
 
 Bij *Instellingen → Diepte & kielspeling → Officiële dieptedata laden* kies je een GeoJSON-bestand.

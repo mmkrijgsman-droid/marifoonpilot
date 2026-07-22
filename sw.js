@@ -1,5 +1,5 @@
 /* MarifoonPilot v2 – service worker (offline app-shell + kaarttegel-cache) */
-const VERSION = "mp2-v2.0.0";
+const VERSION = "mp2-v2.1.0";
 const SHELL = "shell-" + VERSION;
 const TILES = "tiles-" + VERSION;
 
@@ -7,7 +7,8 @@ const SHELL_FILES = [
   "./", "./index.html", "./app.js", "./data.js", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-180.png",
   "./vendor/leaflet/leaflet.js", "./vendor/leaflet/leaflet.css",
-  "./vendor/leaflet/images/marker-icon.png", "./vendor/leaflet/images/marker-shadow.png"
+  "./vendor/leaflet/images/marker-icon.png", "./vendor/leaflet/images/marker-shadow.png",
+  "./depth/diepte.geojson"
 ];
 
 self.addEventListener("install", e => {
