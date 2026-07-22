@@ -1,69 +1,76 @@
-# MarifoonPilot ⚓📻
+# MarifoonPilot v2 ⚓📻
 
-Een GPS-vaarassistent die **automatisch het juiste marifoonkanaal** adviseert op basis van je
-positie op het IJsselmeer, Markermeer en de Waddenzee. Vaar je een nieuw gebied binnen of nader
-je een sluis of brug, dan krijg je een melding met geluid en het juiste kanaal — groot en van
-afstand leesbaar in de kuip.
+Een GPS-vaarassistent die **automatisch het juiste marifoonkanaal** adviseert op het IJsselmeer,
+Markermeer en de Waddenzee — op basis van je **positie én vaarrichting**. Werkt als **PWA** op
+**telefoon, tablet én laptop**, zónder app store, en altijd schermvullend.
 
-Het is een **PWA** (Progressive Web App): je installeert hem op Android én iPhone via de browser,
-zónder app store, APK of Apple-account.
+## Nieuw in v2
+
+- 🧭 **Koers-vooruitkijken** — je krijgt pas een melding voor een sluis/brug als je er écht naartoe
+  vaart. De meldafstand groeit automatisch met je snelheid.
+- 📱💻 **Afstand-bewuste weergave** — telefoon voor dichtbij (~1 m), tablet/laptop als **cockpit** met
+  fors grotere cijfers, leesbaar op 2–3 m. In te stellen bij *Instellingen → Leesafstand*
+  (Telefoon / Tablet / Cockpit + fijnregeling).
+- 🖥️ **Altijd fullscreen** — knop ⛶ rechtsboven; op iPhone via "Zet op beginscherm".
+- ⚓ **Ankeralarm** — ankerpositie vastleggen, instelbare straal, alarm bij wegdriften (met anti-ruis).
+- 🌊 **Kielspeling** — laad optioneel officiële dieptedata (GeoJSON); de app rekent kielspeling =
+  diepte − diepgang en waarschuwt onder je marge. **De app verzint nooit zelf dieptes.**
+- 🆘 **Mayday-hulpkaart** — noodprocedure op kanaal 16 met je positie voorgevuld.
+- ✅ **Geverifieerde kanalen** — 56 van 57 kanalen bevestigd door minstens twee officiële bronnen.
+  (Lorentzsluizen 18, Stevinsluizen 20, Houtribsluizen 20, Naviduct Krabbersgat 22, Ketelbrug 18,
+  Oranjesluizen 18, VTS Den Helder 62, enz.)
+
+Verder: kaart met gebieden/sluizen/bruggen/KNRM, nachtmodus (rood/gedimd), geluid + trillen +
+systeemmelding, scherm-aan-houden, simulatiemodus (tik op de kaart) en offline werking.
 
 ---
 
-## Wat zit erin
+## Installeren op je toestel
 
-- 📻 **Automatisch kanaaladvies** — groot kanaal in beeld, met kleur: groen = normaal, geel/rood = wisselen.
-- 🔔 **Waarschuwing vóór een sluis/brug/gebied** — met geluid, trilsignaal en systeemmelding. De
-  melding blijft staan tot je hem bevestigt.
-- 🗺️ **Kaart** met je eigen boot, alle vaargebieden, sluizen en bruggen (OpenStreetMap, OpenSeaMap
-  zeekaart en satelliet).
-- 🔆 **Groot-scherm** ("Groot") — alleen het kanaal, enorm, voor vanaf een paar meter afstand.
-- 📋 **Kanalenlijst** — nood- & oproepkanalen, verkeersposten, sluizen/bruggen en havens.
-- 🌙 **Nachtmodus** (dag/nacht/automatisch) — rood/gedimd om je nachtzicht te sparen.
-- 🧭 **Simulatiemodus** — test alles thuis: tik op de kaart om een positie te kiezen.
-- 📴 **Offline** — na de eerste keer laden werkt de app (kaart van eerder bezochte gebieden inclusief).
-- ⚙️ Instelbare waarschuwingsafstand (250–2000 m), geluid, trillen, scherm-aan-houden.
+Zet de app eerst online (https), daarna installeer je hem als app.
+
+### Online zetten — kies één
+- **Netlify Drop** (makkelijkst): ga naar `https://app.netlify.com/drop` en sleep de uitgepakte
+  map `marifoonpilot` erin. Je krijgt direct een https-adres.
+- **GitHub Pages**: maak een repo, upload alle bestanden (via *Add file → Upload files*), en zet
+  *Settings → Pages → Deploy from branch → main / root* aan.
+
+### Op je toestel zetten
+- **iPhone/iPad (Safari):** deel-icoon ⬆︎ → **"Zet op beginscherm"**.
+- **Android (Chrome):** menu ⋮ → **"App installeren"**.
+- **Laptop (Chrome/Edge):** installeer-icoon in de adresbalk, of menu → "Installeren".
+
+Sta locatie toe op **"altijd/tijdens gebruik"** voor de beste werking op het water.
 
 ---
 
-## Installeren op je telefoon
+## Eigen dieptedata toevoegen (optioneel)
 
-Je moet de app eerst **online zetten** (hosten op een adres met https). Twee makkelijke manieren:
+Bij *Instellingen → Diepte & kielspeling → Officiële dieptedata laden* kies je een GeoJSON-bestand.
+Verwacht formaat — een `FeatureCollection` van `Point`-features met diepte in meters:
 
-### Optie A — Netlify Drop (makkelijkst, gratis, geen account nodig om te proberen)
-1. Ga naar **https://app.netlify.com/drop**
-2. Sleep de map `marifoonpilot` (of pak eerst `marifoonpilot.zip` uit) naar het vlak.
-3. Je krijgt meteen een https-adres, bijv. `https://iets-willekeurigs.netlify.app`.
-4. Open dat adres op je telefoon → installeer (zie hieronder).
+```json
+{
+  "type": "FeatureCollection",
+  "properties": { "source": "Rijkswaterstaat", "datum": "LAT", "unit": "m" },
+  "features": [
+    { "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [5.28, 52.80] },
+      "properties": { "depth": 3.4 } }
+  ]
+}
+```
 
-### Optie B — GitHub Pages (gratis, eigen adres)
-1. Maak een GitHub-repo en upload alle bestanden.
-2. Repo → *Settings → Pages* → *Deploy from branch* → `main` / root.
-3. Je krijgt een adres `https://<gebruiker>.github.io/<repo>/`.
-
-### Daarna: op je telefoon zetten
-- **iPhone (Safari):** open het adres → deel-icoon **⬆︎** → **"Zet op beginscherm"**.
-- **Android (Chrome):** open het adres → menu **⋮** → **"App installeren"**.
-
-Open hem voortaan vanaf je beginscherm: schermvullend, mét GPS. Sta locatie toe op **"altijd"** of
-**"tijdens gebruik"** voor de beste werking op het water.
-
-> Tip: even lokaal proberen op je computer kan met een mini-webserver in de map:
-> `python3 -m http.server 8000` → open `http://localhost:8000`. (Voor GPS op je telefoon is https/hosting nodig.)
+Let op: coördinaten in GeoJSON-volgorde `[lengtegraad, breedtegraad]`. Gebruik uitsluitend
+**officiële** dieptedata (bv. van Rijkswaterstaat) — MarifoonPilot toont alleen wat je zelf laadt.
 
 ---
 
 ## Kanalen aanpassen of uitbreiden
 
-Alle vaargebieden, sluizen, bruggen en kanalen staan als **platte data** in `data.js`. Je kunt daar
-eenvoudig gebieden bijmaken of kanalen wijzigen:
-
-- `AREAS` — gebieden (polygonen) met een uitluisterkanaal.
-- `POINTS` — sluizen/bruggen op hun exacte locatie, met kanaal en meldafstand.
-- `VTS`, `HARBORS`, `EMERGENCY` — de referentielijsten.
-
-Elk punt heeft `lat`, `lon`, `channel` en `radius` (meldafstand in meter). Nieuwe brug toevoegen =
-één regel erbij in `POINTS`.
+Alles staat als platte data in `data.js`: `AREAS` (gebieden), `POINTS` (sluizen/bruggen),
+`VTS`, `HARBORS`, `KNRM` en `EMERGENCY`. Een brug toevoegen is één regel erbij in `POINTS`
+(met `lat`, `lon`, `channel`, `radius`).
 
 ---
 
@@ -71,13 +78,12 @@ Elk punt heeft `lat`, `lon`, `channel` en `radius` (meldafstand in meter). Nieuw
 
 MarifoonPilot is een **hulpmiddel, geen vervanging** voor je marifoon of officiële vaarinformatie.
 
-- Kanalen en bedieningstijden **kunnen wijzigen**. Controleer altijd de actuele
-  **Wateralmanak deel 1 & 2** en **vaarweginformatie.nl**.
+- Kanalen en bedieningstijden **kunnen wijzigen**. Controleer altijd de **Wateralmanak deel 1 & 2**
+  en **vaarweginformatie.nl**.
 - De vaargebieden zijn **indicatief** ingetekend voor kanaaladvies — **niet** om op te navigeren.
-  Gebruik altijd een gecertificeerde (zee)kaart.
-- In nood: **kanaal 16** (de Kustwacht luistert 24/7 uit).
+- In nood: **kanaal 16** (Kustwacht luistert 24/7 uit).
 
-Kanalen in deze versie zijn geverifieerd via Nautin, Waterkaart Live en Rijkswaterstaat
-Vaarweginformatie (juli 2026).
+Kanalen geverifieerd (juli 2026) via Rijkswaterstaat Vaarweginformatie, waterkaart.net,
+varendoejesamen.nl en Nautin.
 
 Behouden vaart! ⛵
