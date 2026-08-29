@@ -1,0 +1,17 @@
+# Downloadcache van tools/build-depth-rws.py. Loopt bij een landelijke bouw richting
+# een paar honderd MB en is altijd opnieuw bij Rijkswaterstaat op te halen.
+tools/.rws-cache/
+
+# Bron-GeoTIFF voor build-depth.py (EMODnet). Groot, en niet onze data om te verspreiden.
+tools/*.tif
+
+# Machinegebonden instellingen: staan vol absolute paden van één laptop.
+.claude/settings.local.json
+
+# Tijdelijke bestanden van atomische schrijfacties (schrijf naar .nieuw, dan hernoemen).
+*.nieuw
+
+# Rommel van het besturingssysteem
+Thumbs.db
+desktop.ini
+.DS_Store

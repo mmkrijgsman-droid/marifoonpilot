@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+<title>MarifoonPilot</title>
+<meta name="description" content="GPS-vaarassistent die automatisch het juiste marifoonkanaal adviseert op het IJsselmeer, Markermeer en de Waddenzee. Werkt op telefoon, tablet en laptop." />
+<meta name="theme-color" content="#000000" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icons/icon-192.png" type="image/png" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="MarifoonPilot" />
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+<style>
+  :root{
+    /* leesafstand-factor: 1 = telefoon (~1 m). Cockpit (tablet/laptop, 2-3 m) hoger. */
+    --dist:1;
+    --u:clamp(0.5rem,1.2vmin,1rem);
+    --bg:#000; --bg2:#0a1622; --panel:#0f1f30; --panel2:#13273c; --line:#20364e;
+    --fg:#f2f7fd; --muted:#9db4cf; --accent:#00d0ff; --accent2:#0a4c63;
+    --ok:#17a34a; --ok2:#0f6d33; --warn:#e0a200; --warn2:#8a6400;
+    --alert:#e23b3b; --alert2:#7f1d1d;
+    --state:var(--ok); --state2:var(--ok2);
+    /* Kaart-UI-schaal: volgt de leesafstand, maar afgetopt op 1.6 zodat de knoppenbalk
+       ook op een telefoonscherm op één regel blijft passen. */
+    --mui:clamp(1, var(--dist), 1.6);
+    --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
+    --safe-l:env(safe-area-inset-left,0px); --safe-r:env(safe-area-inset-right,0px);
+  }
+  /* Afstand-defaults per apparaat (overschreven door de leesafstand-instelling) */
+  @media (min-width:760px) and (min-height:600px){ :root{ --dist:2; } }
+  @media (min-width:1200px) and (min-height:650px){ :root{ --dist:2.2; } }
+  @media (pointer:coarse) and (min-width:760px) and (min-height:600px){ :root{ --dist:2.1; } }
+  /* Een telefoon in liggende stand is door zijn lange zijde vaak >760px breed, maar heeft
+     niet de hoogte van een tablet/cockpit. Houd hem daarom op telefoonschaal. */
+  @media (orientation:landscape) and (max-height:599px){ :root{ --dist:1; --mui:1; } }
+
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-user-select:none;user-select:none;overscroll-behavior:none}
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh;
+    padding-left:var(--safe-l);padding-right:var(--safe-r)}
+  button{font:inherit;color:inherit}
+
+  /* ---------- Header ---------- */
+  header{display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:calc(var(--safe-t) + 7px) 12px 7px;background:linear-gradient(180deg,var(--state2),transparent);
+    transition:background .5s ease;flex:0 0 auto}
+  .brand{font-weight:800;font-size:15px;letter-spacing:.3px;display:flex;align-items:center;gap:7px}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(0,208,255,.2)}
+  .htools{display:flex;align-items:center;gap:6px}
+  .gps{font-size:11px;color:var(--fg);opacity:.92;display:flex;align-items:center;gap:5px}
+  .gdot{width:9px;height:9px;border-radius:50%;background:#ffcc00}
+  .gdot.good{background:#7bf57b}.gdot.none{background:#ff6b6b}
+  .iconbtn{background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:10px;
+    padding:7px 9px;font-size:13px;font-weight:700}
+  .iconbtn.on{background:var(--accent);color:#00222c;border-color:var(--accent)}
+
+  main{flex:1 1 auto;position:relative;overflow:hidden}
+  .view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;
+    padding:12px 12px calc(var(--safe-b) + 12px)}
+  .view.active{display:block}
+  #view-varen.active{display:flex;flex-direction:column}
+  #view-map.active{display:block;padding:0}
+  #map{position:absolute;inset:0}
+
+  /* ---------- Dashboard (Varen) — afstand-bewust ---------- */
+  .dash{flex:1 0 auto;display:grid;gap:var(--u);min-height:0}
+  @media (orientation:portrait){ .dash{grid-template-rows:minmax(150px,1fr) auto auto auto} }
+  @media (orientation:landscape){
+    .dash{grid-template-columns:1.35fr 1fr;grid-template-areas:"chan metrics" "chan next" "co co";align-items:stretch}
+    .big-channel{grid-area:chan;display:flex;flex-direction:column;justify-content:center}
+    .metrics{grid-area:metrics}.next{grid-area:next}.coskip{grid-area:co}
+  }
+
+  .big-channel{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--line);
+    border-radius:20px;padding:calc(var(--u) + 6px);text-align:center;position:relative;min-height:0;min-width:0}
+  .big-channel::after{content:"";position:absolute;inset:0;border-radius:20px;pointer-events:none;
+    box-shadow:inset 0 0 0 2px var(--state);opacity:.6;transition:box-shadow .4s}
+  .bc-label{font-size:calc(clamp(.65rem,2vmin,1rem) * clamp(1,var(--dist),1.5));letter-spacing:2px;
+    text-transform:uppercase;color:var(--muted);font-weight:800}
+  .bc-num{font-size:clamp(3.4rem,calc(15vmin * var(--dist)),9rem);font-weight:900;line-height:.9;
+    letter-spacing:-2px;color:var(--accent);text-shadow:0 0 8px rgba(0,0,0,.6);font-variant-numeric:tabular-nums;
+    margin:2px 0}
+  .bc-num small{font-size:.2em;vertical-align:.85em;color:var(--muted);letter-spacing:0;font-weight:800}
+  .bc-post{font-size:clamp(1.1rem,calc(4.4vmin * var(--dist)),3.5rem);font-weight:800;color:var(--fg);line-height:1.08}
+  .bc-reason{font-size:calc(clamp(.75rem,2.2vmin,1rem) * clamp(1,var(--dist),1.35));color:var(--muted);
+    margin-top:6px;line-height:1.3}
+  .bc-dist{margin-top:9px;font-size:calc(clamp(.9rem,3vmin,1.4rem) * clamp(1,var(--dist),1.4));font-weight:800;color:var(--fg);
+    background:rgba(255,255,255,.10);display:inline-block;padding:5px 14px;border-radius:999px}
+  .btn-ack{margin-top:11px;display:none;width:100%;padding:14px;border:0;border-radius:14px;
+    background:#fff;color:var(--alert2);font-weight:900;font-size:calc(clamp(1rem,3vmin,1.3rem) * clamp(1,var(--dist),1.2))}
+  .big-channel.needsack .btn-ack{display:block}
+
+  .metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--u);align-content:start}
+  @media (orientation:landscape){ .metrics{grid-template-columns:repeat(2,1fr)} }
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:9px 12px}
+  .tile .k{font-size:calc(clamp(.6rem,1.7vmin,.85rem) * clamp(1,var(--dist),1.3));text-transform:uppercase;
+    letter-spacing:1px;color:var(--muted);font-weight:800}
+  .tile .v{font-size:calc(clamp(1.2rem,4vmin,2rem) * clamp(1,var(--dist),1.4));font-weight:800;margin-top:1px;
+    font-variant-numeric:tabular-nums}
+  .tile .v small{font-size:.5em;color:var(--muted);font-weight:700}
+  .tile .tnote{font-size:calc(clamp(.55rem,1.5vmin,.75rem) * clamp(1,var(--dist),1.2));color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tile.warn{border-color:var(--warn)}.tile.danger{border-color:var(--alert);background:#2a1414}
+  /* diepte uit het regionale model i.p.v. officiële lodingen — zichtbaar minder hard */
+  .tile.model .tnote{color:var(--warn)}
+
+  .next{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;
+    display:flex;align-items:center;gap:10px}
+  .next .ico{font-size:calc(clamp(1.1rem,3vmin,1.6rem) * clamp(1,var(--dist),1.3))}
+  .next .t{flex:1;min-width:0}
+  .next .t .a{font-weight:800;font-size:calc(clamp(.85rem,2.4vmin,1.1rem) * clamp(1,var(--dist),1.3));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .next .t .b{font-size:calc(clamp(.7rem,1.9vmin,.9rem) * clamp(1,var(--dist),1.2));color:var(--muted);margin-top:1px}
+  .next .ch{font-weight:900;font-size:calc(clamp(1.1rem,3.4vmin,1.6rem) * clamp(1,var(--dist),1.35));
+    background:rgba(0,208,255,.16);color:#bfeeff;border-radius:12px;padding:5px 12px;min-width:52px;text-align:center}
+
+  .coskip{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+  .coskip .k{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:800}
+  .coskip .v{font-size:calc(clamp(.85rem,2.4vmin,1.05rem) * clamp(1,var(--dist),1.25));font-weight:700;margin-top:2px}
+  .coskip .s{font-size:12px;color:var(--muted);margin-top:2px}
+
+  .startrow{display:flex;gap:8px;margin-top:8px}
+  .start-btn{flex:1;padding:14px;border:0;border-radius:14px;background:var(--accent);color:#00222c;
+    font-size:calc(clamp(1rem,3vmin,1.2rem) * clamp(1,var(--dist),1.2));font-weight:800}
+  .start-btn.secondary{background:var(--panel);border:1px solid var(--line);color:var(--fg)}
+  .hint{color:var(--muted);font-size:12px;text-align:center;margin:8px 4px 2px;line-height:1.4}
+
+  /* ---------- Kaart ---------- */
+  .simbadge{position:absolute;top:calc(var(--safe-t) + 4px);left:50%;transform:translateX(-50%);
+    background:var(--warn);color:#3a2600;font-weight:900;font-size:calc(11px * var(--mui));
+    padding:calc(4px * var(--mui)) calc(10px * var(--mui));border-radius:999px;z-index:600;display:none;white-space:nowrap}
+  body.sim .simbadge{display:block}
+  /* Rechtsonder staan twee dingen onder elkaar: 🎯 bovenop, de zoomregelaar eronder. */
+  /* De zoomregelaar staat onderin rechts (23px vanaf de rand + 2 knoppen); 🎯 moet daar ruim boven blijven */
+  .maptools{position:absolute;right:10px;bottom:calc(34px + 72px * var(--mui));z-index:600;display:flex;flex-direction:column;gap:8px}
+  .maptools button{width:calc(46px * var(--mui));height:calc(46px * var(--mui));border-radius:calc(14px * var(--mui));
+    border:1px solid var(--line);background:rgba(10,22,34,.92);color:#fff;font-size:calc(20px * var(--mui));font-weight:800}
+  .leaflet-control-zoom a{width:calc(34px * var(--mui))!important;height:calc(34px * var(--mui))!important;
+    line-height:calc(32px * var(--mui))!important;font-size:calc(20px * var(--mui))!important}
+  /* Alles linksonder in één kolom: routebalk bovenop, daaronder de kaartkiezer met zijn
+     overlayknoppen. Zo kunnen ze elkaar niet overlappen als er een overlay bijkomt —
+     eerder stonden hier vaste calc()-offsets die daar niet tegen konden. */
+  .mapbottom{position:absolute;left:10px;bottom:16px;z-index:600;display:flex;flex-direction:column;
+    gap:6px;align-items:flex-start;max-width:calc(100% - 30px - 34px * var(--mui))}
+  .layerpick{display:flex;gap:6px;align-items:stretch;flex-wrap:wrap}
+  .ovbtns{display:flex;gap:6px;flex-wrap:wrap}
+  .layerpick select{background:rgba(10,22,34,.94);color:var(--fg);border:1px solid var(--line);border-radius:10px;
+    padding:calc(9px * var(--mui)) calc(10px * var(--mui));font-size:calc(14px * var(--mui))}
+  .seabtn{background:rgba(10,22,34,.94);color:var(--muted);border:1px solid var(--line);border-radius:10px;
+    padding:calc(9px * var(--mui)) calc(12px * var(--mui));font-size:calc(13.5px * var(--mui));font-weight:700;white-space:nowrap}
+  .seabtn.on{background:var(--accent);color:#00222c;border-color:var(--accent)}
+  .depth-label-wrap{background:transparent!important;border:0!important;width:auto!important;height:auto!important}
+  .depth-map-label{display:inline-block;transform:translate(-50%,-50%);white-space:nowrap;border-radius:7px;
+    padding:3px 6px;background:rgba(0,26,34,.94);border:2px solid #00d0ff;color:#dffaff;
+    font-size:calc(11px * var(--mui));font-weight:900;line-height:1.1;box-shadow:0 1px 5px rgba(0,0,0,.75)}
+  .depth-map-label.draft{background:rgba(42,25,0,.95);border-color:#ffb84d;color:#fff1cf}
+  /* Vooruitblik-balk: wijkt uit voor de simulatiebadge en schuift onder een openstaande toast door */
+  .predbar{position:absolute;top:calc(var(--safe-t) + 8px);left:10px;right:10px;z-index:600;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;
+    transform:translateY(var(--toast-push,0px));transition:transform .3s cubic-bezier(.2,.9,.3,1)}
+  body.sim .predbar{top:calc(var(--safe-t) + 6px + 30px * var(--mui))}
+  .predbtn{background:rgba(10,22,34,.92);color:var(--muted);border:1px solid var(--line);border-radius:999px;
+    display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;
+    min-height:calc(44px * var(--mui));padding:0 calc(13px * var(--mui));font-size:calc(13.5px * var(--mui));font-weight:700}
+  .predbtn.on{background:var(--accent);color:#00222c;border-color:var(--accent)}
+  .predbadge{background:rgba(10,22,34,.9);color:#bfeeff;border:1px solid var(--line);
+    border-radius:calc(14px * var(--mui));max-width:100%;
+    padding:calc(5px * var(--mui)) calc(11px * var(--mui));font-size:calc(11.5px * var(--mui));font-weight:700;display:none;line-height:1.35}
+  .leaflet-control-attribution{font-size:9px}
+
+  /* ---------- Nachtmodus (rood/gedimd, spaart nachtzicht) ---------- */
+  body.night{--bg:#000;--bg2:#160303;--panel:#1a0505;--panel2:#210707;--line:#3a0d0d;
+    --fg:#ffcac4;--muted:#c98a86;--accent:#ff6a4d;--accent2:#5c1c14;
+    --ok:#7a2a17;--ok2:#4a1a0e;--warn:#8a5a12;--warn2:#5a3a0c;--alert:#c62828;--alert2:#7a1410}
+  body.night .bc-num,body.night .safety-big .c{color:#ff8f77}
+  body.night img,body.night #map{filter:brightness(.62) sepia(.35) hue-rotate(-25deg) saturate(1.25)}
+  body.night .start-btn{background:#7a2a17;color:#ffd}
+  body.night .row .chan,body.night .next .ch{color:#ffb3a6;background:rgba(198,40,40,.2)}
+
+  /* ---------- Lijsten (Objecten / Kanalen) ---------- */
+  h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin:16px 4px 8px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .row{display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid var(--line)}
+  .row:first-child{border-top:0}
+  .row .name{flex:1;min-width:0}
+  .row .name .a{font-weight:700;font-size:15px}
+  .row .name .b{font-size:12px;color:var(--muted);margin-top:1px}
+  .row .chan{font-weight:900;font-size:20px;color:#bfeeff;background:rgba(0,208,255,.14);border-radius:10px;padding:5px 12px;min-width:48px;text-align:center}
+  .row .chan.red{color:#ffd4d4;background:rgba(226,59,59,.22)}
+  .tag{font-size:10px;font-weight:800;color:#ffce6b;border:1px solid #6b5220;border-radius:6px;padding:1px 5px;margin-left:6px}
+  .emg{background:linear-gradient(180deg,#3a1414,#280f0f);border:1px solid #6b2323}
+  .emg .row{border-top-color:#5a2020}
+
+  /* ---------- Veiligheid ---------- */
+  .safety-big{background:linear-gradient(180deg,#3a1414,#220c0c);border:1px solid #6b2323;border-radius:18px;
+    padding:16px;text-align:center;margin-bottom:12px}
+  .safety-big .c{font-size:calc(clamp(2.4rem,10vmin,4rem) * clamp(1,var(--dist),1.3));font-weight:900;color:#ff8f8f;line-height:1}
+  .safety-big .l{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#e8a3a3;font-weight:800}
+  .bigbtn{width:100%;padding:15px;border:0;border-radius:14px;font-weight:800;font-size:16px;margin-top:10px}
+  .bigbtn.red{background:#c62828;color:#fff}.bigbtn.blue{background:var(--accent);color:#00222c}
+  .bigbtn.grey{background:var(--panel2);border:1px solid var(--line);color:var(--fg)}
+  .anchorstat{font-size:22px;font-weight:900;margin-top:4px}
+  .anchorstat.ok{color:#7bf57b}.anchorstat.warn{color:#ffce6b}.anchorstat.danger{color:#ff8f8f}
+
+  /* ---------- Instellingen ---------- */
+  .set{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 14px;border-top:1px solid var(--line)}
+  .set:first-child{border-top:0}
+  .set .lab{font-weight:600;font-size:15px}
+  .set .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .switch{position:relative;width:52px;height:30px;flex:0 0 auto}
+  .switch input{opacity:0;width:0;height:0}
+  .slider{position:absolute;inset:0;background:#274b70;border-radius:999px;transition:.2s}
+  .slider::before{content:"";position:absolute;height:24px;width:24px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+  .switch input:checked + .slider{background:var(--accent)}
+  .switch input:checked + .slider::before{transform:translateX(22px)}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  select,.filebtn{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-size:15px;min-height:44px}
+  .rangeval{font-weight:800;color:#bfeeff;min-width:74px;text-align:right}
+  .seg{display:flex;background:#0b1a28;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .seg button{flex:1;background:transparent;border:0;color:var(--muted);padding:9px 6px;font-weight:800;font-size:13px;min-height:44px}
+  .seg button.on{background:var(--accent);color:#00222c}
+
+  /* ---------- Bottom nav ---------- */
+  nav{flex:0 0 auto;display:flex;background:#05101c;border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
+  nav button{flex:1;background:none;border:0;color:var(--muted);padding:8px 2px 7px;font-size:10px;font-weight:700;
+    display:flex;flex-direction:column;align-items:center;gap:3px}
+  nav button .ni{font-size:19px;line-height:1}
+  nav button.active{color:#fff}
+  nav button.active .ni{filter:drop-shadow(0 0 6px rgba(0,208,255,.7))}
+  body.cockpit-hide nav{display:none} /* auto-hide in cockpit-fullscreen */
+
+  /* ---------- Toast ---------- */
+  #toast{position:fixed;left:12px;right:12px;top:calc(var(--safe-t) + 8px);z-index:1200;background:var(--alert);color:#fff;
+    border-radius:16px;padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.6);transform:translateY(-170%);
+    transition:transform .35s cubic-bezier(.2,.9,.3,1);display:flex;gap:12px;align-items:flex-start}
+  #toast.show{transform:translateY(0)}
+  #toast.warn{background:var(--warn);color:#241900}
+  #toast .ti{font-size:24px;line-height:1}
+  #toast .tt{flex:1}
+  #toast .tt .h{font-weight:900;font-size:16px}
+  #toast .tt .p{font-size:14px;margin-top:2px;line-height:1.35}
+  #toast button{background:rgba(255,255,255,.22);border:0;color:inherit;font-weight:800;border-radius:10px;padding:8px 12px;font-size:14px}
+
+  /* ---------- Modal / dialog ---------- */
+  .modal{position:fixed;inset:0;z-index:1500;background:rgba(0,6,12,.85);display:none;align-items:center;justify-content:center;padding:18px}
+  .modal.show{display:flex}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:20px;max-width:480px;width:100%;padding:20px;max-height:86dvh;overflow-y:auto}
+  .modal h3{margin:0 0 8px;font-size:20px}
+  .modal p{color:var(--muted);font-size:14px;line-height:1.5;margin:8px 0}
+  .modal ul,.modal ol{color:var(--muted);font-size:14px;line-height:1.6;padding-left:20px;margin:8px 0}
+  .modal .ok{width:100%;margin-top:14px;padding:14px;border:0;border-radius:14px;background:var(--accent);color:#00222c;font-weight:800;font-size:16px}
+  .maystep{color:var(--fg)}
+
+  /* ============================================================
+     LEESBAARHEID op telefoon — grotere onderbalk, koptekst,
+     sectiekoppen, menu-/knoplabels en icoontjes. Staat bewust
+     achteraan zodat het de bovenstaande maten overschrijft.
+     ============================================================ */
+  /* Onderste navigatiebalk */
+  nav button{font-size:13px;font-weight:800;padding:9px 2px 8px;gap:4px}
+  nav button .ni{font-size:27px}
+  /* Koptekst */
+  .brand{font-size:17px}
+  .gps{font-size:13px}
+  .iconbtn{font-size:16px;padding:9px 12px}
+  /* Sectiekoppen en lijsten */
+  h2.sec{font-size:15px}
+  .row .name .a{font-size:16px}
+  .row .name .b{font-size:13px}
+  .tag{font-size:11px}
+  .hint{font-size:13px;line-height:1.45}
+  /* Instellingen */
+  .set .lab{font-size:16px}
+  .set .sub{font-size:13px}
+  .seg button{font-size:14px}
+  /* Co-schipper / veiligheid */
+  .coskip .k{font-size:12px}
+  .coskip .s{font-size:13px}
+  .safety-big .l{font-size:13px}
+  /* Meetwaarde-tegels (label iets groter, waarde blijft schalen) */
+  .tile .k{font-size:calc(clamp(.75rem,2.1vmin,.95rem) * clamp(1,var(--dist),1.3))}
+  /* Kaart-icoontjes/knoppen iets groter op de telefoon */
+  @media (max-width:759px){ :root{ --mui:1.2; } }
+  @media (max-width:599px){
+    .layerpick{width:100%}.layerpick select{width:100%}.ovbtns{width:100%;flex-wrap:nowrap}
+    .ovbtns .seabtn{flex:1;min-width:0;padding-left:6px;padding-right:6px;overflow:hidden;text-overflow:ellipsis}
+  }
+  /* Brede tekstkolommen zijn op laptop moeilijk te scannen. */
+  @media (min-width:1000px){
+    #view-safe,#view-obj,#view-set{padding-left:max(12px,calc((100% - 960px)/2));padding-right:max(12px,calc((100% - 960px)/2))}
+    nav button{font-size:15px} nav button .ni{font-size:29px}
+  }
+  /* Compacte cockpit voor telefoons in liggende stand: kaartbediening en onderbalk
+     laten meer van de kaart over en blijven toch ruim aantikbaar. */
+  @media (orientation:landscape) and (max-height:500px){
+    header{padding-top:4px;padding-bottom:4px}.brand{font-size:15px}.gps{font-size:12px}.iconbtn{font-size:14px;padding:7px 9px}
+    nav button{font-size:11px;padding:4px 2px 3px;gap:1px}nav button .ni{font-size:21px}
+    .predbar{gap:4px;flex-wrap:nowrap;top:4px}.predbtn{min-height:40px;padding:0 10px;font-size:12px}
+    .mapbottom{bottom:8px;gap:4px}.layerpick,.ovbtns{gap:4px}
+    .layerpick select,.seabtn{padding:7px 9px;font-size:12px}
+    .maptools{bottom:78px}.maptools button{width:44px;height:44px;font-size:19px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand"><span class="dot"></span> MarifoonPilot</div>
+    <div class="htools">
+      <div class="gps"><span class="gdot none" id="gdot"></span><span id="gpsInfo">GPS uit</span></div>
+      <button class="iconbtn" id="btnFs" title="Volledig scherm">⛶</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- VAREN -->
+    <section id="view-varen" class="view active">
+      <div class="dash">
+        <div class="big-channel" id="bigChannel">
+          <div class="bc-label" id="bcLabel">Aanbevolen marifoon</div>
+          <div class="bc-num" id="bcNum">–</div>
+          <div class="bc-post" id="bcPost">Start GPS om te beginnen</div>
+          <div class="bc-reason" id="bcReason">De app adviseert automatisch het juiste kanaal op basis van je positie en koers.</div>
+          <div class="bc-dist" id="bcDist" style="display:none"></div>
+          <button class="btn-ack" id="btnAck">Begrepen – kanaal gewijzigd</button>
+        </div>
+        <div class="metrics">
+          <div class="tile"><div class="k">Snelheid</div><div class="v"><span id="sog">–</span> <small>kn</small></div></div>
+          <div class="tile"><div class="k">Koers</div><div class="v"><span id="cog">–</span><small>°</small></div></div>
+          <div class="tile"><div class="k">Gebied</div><div class="v" style="font-size:calc(clamp(.9rem,2.6vmin,1.3rem) * clamp(1,var(--dist),1.3))" id="areaName">–</div></div>
+          <div class="tile" id="depthTile"><div class="k">Kielspeling</div><div class="v"><span id="clearance">–</span> <small>m</small></div><div class="tnote" id="depthNote"></div></div>
+          <div class="tile" id="tideTile"><div class="k">Waterstand</div><div class="v"><span id="tideVal">–</span> <small>m NAP</small></div><div class="tnote" id="tideSub">niet ingesteld</div></div>
+        </div>
+        <div class="next" id="nextBox" style="display:none">
+          <div class="ico">➡️</div>
+          <div class="t"><div class="a" id="nextName">–</div><div class="b" id="nextMeta">–</div></div>
+          <div class="ch" id="nextCh">–</div>
+        </div>
+        <div class="coskip"><div class="k">🧭 Co-schipper</div><div class="v" id="coText">GPS nog niet gestart.</div><div class="s" id="coSub">Vooruitkijken wordt actief zodra koers en snelheid bekend zijn.</div></div>
+      </div>
+      <div class="startrow">
+        <button class="start-btn" id="btnStart">GPS starten</button>
+        <button class="start-btn secondary" id="btnSim">Simulatie</button>
+      </div>
+      <div class="hint" id="disclaimerHint">⚠️ Indicatieve hulp — controleer kanalen altijd bij de Wateralmanak / vaarweginformatie.nl. Vervangt je marifoon niet.</div>
+    </section>
+
+    <!-- KAART -->
+    <section id="view-map" class="view">
+      <div id="map"></div>
+      <div class="simbadge">SIMULATIE — tik op de kaart</div>
+      <div class="predbar">
+        <button id="tgDots" class="predbtn on" title="Tijd-bolletjes aan/uit — langs je route, of langs je huidige koers als er geen route is">● Tijd</button>
+        <button id="tgRings" class="predbtn" title="Afstandsringen vanaf de boot">◎ Ringen</button>
+        <button id="tgRoute" class="predbtn" title="Routelijn tekenen">✏️ Route</button>
+        <button id="tgClear" class="predbtn" title="Route wissen">✕ Wis</button>
+      </div>
+      <div class="mapbottom">
+        <div id="predBadge" class="predbadge"></div>
+        <div class="layerpick">
+          <select id="layerSel"></select>
+          <span id="overlayBtns" class="ovbtns"></span>
+        </div>
+      </div>
+      <div class="maptools">
+        <button id="btnLocate" title="Centreer op mij">🎯</button>
+      </div>
+    </section>
+
+    <!-- VEILIGHEID -->
+    <section id="view-safe" class="view">
+      <div class="safety-big">
+        <div class="l">Nood- &amp; oproepkanaal</div>
+        <div class="c">16</div>
+        <button class="bigbtn red" id="btnMayday">Mayday-hulpkaart</button>
+      </div>
+      <h2 class="sec">⚓ Ankeralarm</h2>
+      <div class="card"><div style="padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><div class="lab" style="font-weight:600">Status</div><div class="anchorstat ok" id="anchorStat">Uit</div></div>
+          <button class="bigbtn blue" style="width:auto;margin-top:0;padding:12px 16px" id="btnAnchor">Anker laten vallen</button>
+        </div>
+        <div class="set" style="border-top:1px solid var(--line);margin-top:12px">
+          <div><div class="lab">Alarmstraal</div><div class="sub">Alarm als je verder wegdrijft.</div></div>
+          <div class="rangeval" id="anchorRadVal">40 m</div>
+        </div>
+        <input type="range" id="anchorRad" min="10" max="250" step="5" value="40">
+      </div></div>
+      <h2 class="sec">🚨 Nood- &amp; oproepkanalen</h2>
+      <div class="card emg" id="emgList"></div>
+      <h2 class="sec">KNRM-reddingstations</h2>
+      <div class="card" id="knrmList"></div>
+    </section>
+
+    <!-- OBJECTEN / KANALEN -->
+    <section id="view-obj" class="view">
+      <h2 class="sec">⚓ Sluizen &amp; bruggen</h2>
+      <div class="card" id="lockList"></div>
+      <h2 class="sec">📻 Verkeersposten</h2>
+      <div class="card" id="vtsList"></div>
+      <h2 class="sec">🏠 Havens (oproep)</h2>
+      <div class="card" id="harborList"></div>
+      <div class="hint">Bron: Rijkswaterstaat FIS/VNDS en Vaarweginformatie, aangevuld met dubbel-gecontroleerde bronnen. <span class="tag">✓ geverifieerd</span> = door ≥2 bronnen bevestigd.</div>
+    </section>
+
+    <!-- INSTELLINGEN -->
+    <section id="view-set" class="view">
+      <h2 class="sec">Weergave &amp; leesafstand</h2>
+      <div class="card">
+        <div class="set"><div><div class="lab">Apparaat / kijkafstand</div><div class="sub">Telefoon ≈ 1 m · Tablet/laptop 2–3 m (grotere cijfers).</div></div></div>
+        <div style="padding:0 14px 12px"><div class="seg" id="distSeg">
+          <button data-mode="phone">Telefoon</button>
+          <button data-mode="tablet">Tablet</button>
+          <button data-mode="cockpit">Cockpit</button>
+        </div></div>
+        <div class="set"><div><div class="lab">Fijn afstemmen</div><div class="sub">Schaal van alle cijfers.</div></div><div class="rangeval" id="distVal">1.0×</div></div>
+        <div style="padding:0 14px 12px"><input type="range" id="distRange" min="0.8" max="3.2" step="0.1" value="1"></div>
+        <div class="set"><div><div class="lab">Thema</div><div class="sub">Nachtmodus (rood/gedimd) spaart je nachtzicht.</div></div>
+          <select id="setTheme"><option value="auto">Automatisch</option><option value="day">Dag</option><option value="night">Nacht</option></select></div>
+        <div class="set"><div><div class="lab">Scherm aan houden</div><div class="sub">Voorkomt dat het scherm uitgaat tijdens het varen.</div></div>
+          <label class="switch"><input type="checkbox" id="setWake"><span class="slider"></span></label></div>
+      </div>
+
+      <h2 class="sec">Waarschuwingen</h2>
+      <div class="card">
+        <div class="set"><div><div class="lab">Basis-meldafstand</div><div class="sub">Groeit automatisch met je snelheid.</div></div><div class="rangeval" id="warnVal">700 m</div></div>
+        <div style="padding:0 14px 12px"><input type="range" id="warnRange" min="250" max="2000" step="50" value="700"></div>
+        <div class="set"><div><div class="lab">Alleen op koers waarschuwen</div><div class="sub">Meld een object pas als je er echt naartoe vaart.</div></div>
+          <label class="switch"><input type="checkbox" id="setLookahead" checked><span class="slider"></span></label></div>
+        <div class="set"><div><div class="lab">Geluidssignaal</div><div class="sub">Toon bij kanaalwissel.</div></div>
+          <label class="switch"><input type="checkbox" id="setSound" checked><span class="slider"></span></label></div>
+        <div class="set"><div><div class="lab">Trillen</div><div class="sub">Trilsignaal bij melding.</div></div>
+          <label class="switch"><input type="checkbox" id="setVibe" checked><span class="slider"></span></label></div>
+        <div class="set"><div><div class="lab">Systeemmelding</div><div class="sub">Pushmelding tonen (vraagt toestemming).</div></div>
+          <label class="switch"><input type="checkbox" id="setNotify" checked><span class="slider"></span></label></div>
+      </div>
+
+      <h2 class="sec">Vooruitblik op de kaart</h2>
+      <div class="card">
+        <div class="set"><div><div class="lab">Tijd-bolletjes &amp; ringen</div><div class="sub">Zet je aan/uit met de knoppen op de kaart. Interval en horizon passen zich automatisch aan je zoomniveau én snelheid aan (meer inzoomen = fijner, sneller varen = verder).</div></div></div>
+        <div class="set"><div><div class="lab">Planningssnelheid</div><div class="sub">Gebruikt voor de tijd-bolletjes als je (nog) stilligt. Onderweg gebruikt de app je werkelijke snelheid.</div></div><div class="rangeval" id="planSpeedVal">4,5 kn</div></div>
+        <div style="padding:0 14px 12px"><input type="range" id="planSpeedRange" min="2" max="15" step="0.5" value="4.5"></div>
+        <div class="set"><div><div class="lab">Wachttijd per sluis/brug</div><div class="sub">Ligt er een sluis of brug op je routelijn die open moet, dan telt de app deze tijd op bij de reistijd — en schuiven ook de tijd-bolletjes ná dat object mee. Op 0 zetten schakelt het uit.</div></div><div class="rangeval" id="lockDelayVal">15 min</div></div>
+        <div style="padding:0 14px 12px"><input type="range" id="lockDelayRange" min="0" max="60" step="5" value="15"></div>
+        <div class="set"><div><div class="lab">Hoogte boven water</div><div class="sub">Hoogste punt van je boot (mast, antenne, bimini). Past dit + 0,5 m marge onder de doorvaarthoogte van een gesloten brug, dan vaar je er zó onderdoor en rekent de app géén wachttijd. Zolang dit niet is ingesteld gaat de app ervan uit dat élke brug open moet.</div></div><div class="rangeval" id="airDraftVal">niet ingesteld</div></div>
+        <div style="padding:0 14px 12px"><input type="range" id="airDraftRange" min="1.5" max="25" step="0.1" value="4"></div>
+        <div class="sub" style="padding:0 14px 12px;color:var(--muted)">⚠️ Doorvaarthoogtes gelden t.o.v. het streefpeil en wisselen met het waterpeil. Controleer altijd de Wateralmanak deel 2.</div>
+      </div>
+
+      <h2 class="sec">Diepte &amp; kielspeling</h2>
+      <div class="card">
+        <div class="set"><div><div class="lab">Eigen diepgang</div><div class="sub">Voor de kielspeling-berekening.</div></div><div class="rangeval" id="draftVal">1,55 m</div></div>
+        <div style="padding:0 14px 12px"><input type="range" id="draftRange" min="0.3" max="3.0" step="0.05" value="1.55"></div>
+        <div class="set"><div><div class="lab">Min. kielspeling</div><div class="sub">Waarschuw onder deze marge.</div></div><div class="rangeval" id="marginVal">0,40 m</div></div>
+        <div style="padding:0 14px 12px"><input type="range" id="marginRange" min="0.1" max="1.5" step="0.05" value="0.4"></div>
+        <div class="set"><div><div class="lab">Waterpeil t.o.v. NAP</div><div class="sub">Geldt voor de RWS-lodingen. Die geven de <b>bodemhoogte</b> t.o.v. NAP, dus de diepte volgt uit het waterpeil: diepte = peil − bodemhoogte. Zodra er een gemeten waterstand binnenkomt, gebruikt de app die en negeert hij dit getal. <b>Dit is een aanname</b> — controleer het actuele peilbesluit of de Wateralmanak. Onder de kielspeling staat altijd welke van de twee gebruikt is.</div></div><div class="rangeval" id="peilVal">−0,20 m</div></div>
+        <div style="padding:0 14px 12px"><input type="range" id="peilRange" min="-1.0" max="0.5" step="0.05" value="-0.20"></div>
+        <div class="set"><div><div class="lab">Reductievlak t.o.v. NAP</div><div class="sub">Geldt alleen voor de <b>LAT</b>-dieptedata (Waddenzee-lodingen en het EMODnet-model), niet voor de RWS-lodingen — die hebben NAP al als referentievlak. Vul het reductievlak van jouw vaargebied in (Wateralmanak deel 2; Waddenzee grofweg −1,0 tot −1,4 m) en de app rekent het getij mee. Op "uit" blijft de kielspeling de kale kaartdiepte.</div></div><div class="rangeval" id="chartDatumVal">uit</div></div>
+        <div style="padding:0 14px 12px"><input type="range" id="chartDatumRange" min="-2.5" max="0.5" step="0.05" value="-1.2"></div>
+        <div class="set"><div><div class="lab">Officiële dieptedata laden</div><div class="sub">GeoJSON met dieptepunten. De app verzint nooit zelf dieptes.</div></div>
+          <label class="filebtn" for="depthFile">Bestand…</label><input id="depthFile" type="file" accept=".geojson,.json" style="display:none"></label></div>
+        <div class="sub" id="depthStatus" style="padding:0 14px 12px;color:var(--muted)">Waddenzee- en IJsselmeerdata voor kielspeling worden automatisch geladen. De kaartknop Diepte toont daarnaast landelijke RWS-vaarwegdieptes.</div>
+      </div>
+
+      <h2 class="sec">Kaartprovider</h2>
+      <div class="card">
+        <div class="set"><div><div class="lab">Betaalde kaartlagen</div><div class="sub">De gratis tegels van OpenStreetMap en OpenSeaMap zijn niet bedoeld voor commercieel of zwaar gebruik. Met een sleutel van MapTiler of Thunderforest verschijnen hun lagen automatisch in de kaartkiezer. Vul je niets in, dan blijft de app gewoon op OSM werken.</div></div></div>
+        <div class="set"><div><div class="lab">MapTiler-sleutel</div><div class="sub">cloud.maptiler.com → Keys. Geeft o.a. een zeekaart-stijl.</div></div></div>
+        <div style="padding:0 14px 12px"><input type="text" id="keyMaptiler" class="filebtn" style="width:100%" placeholder="leeg = uit" autocomplete="off" spellcheck="false"></div>
+        <div class="set"><div><div class="lab">Thunderforest-sleutel</div><div class="sub">manage.thunderforest.com → API key.</div></div></div>
+        <div style="padding:0 14px 12px"><input type="text" id="keyThunderforest" class="filebtn" style="width:100%" placeholder="leeg = uit" autocomplete="off" spellcheck="false"></div>
+        <div class="sub" style="padding:0 14px 12px;color:var(--muted)">⚠️ Een sleutel in een webapp is voor iedere gebruiker zichtbaar — dat hoort zo. Beveilig hem bij de provider met een domeinrestrictie, niet door hem te verbergen. Voor een uitrol zet je hem vast in <code>config.js</code>; dit veld is bedoeld om te proberen.</div>
+      </div>
+
+      <h2 class="sec">Scheepvaart (AIS)</h2>
+      <div class="card">
+        <div class="set"><div><div class="lab">Schepen op de kaart</div><div class="sub">Toont schepen die AIS uitzenden, via EuRIS. Tik een schip aan voor afmetingen, koers, snelheid en — als de bron hem geeft — de naam. Zet de kaartknop <b>🚢 Scheepvaart</b> aan om ze te zien.</div></div>
+          <label class="switch"><input type="checkbox" id="setAis"><span class="slider"></span></label></div>
+        <div class="set"><div><div class="lab">AIS-proxy (URL)</div><div class="sub">EuRIS stuurt geen CORS-headers, dus er moet een klein tussenstukje tussen. Kant-en-klare code staat in <code>tools/proxy/</code> voor Netlify en Cloudflare — gratis. Laat je dit leeg, dan blijft de laag uit.</div></div></div>
+        <div style="padding:0 14px 12px"><input type="text" id="aisApiInput" class="filebtn" style="width:100%" placeholder="leeg = uit" autocomplete="off" spellcheck="false"></div>
+        <div class="sub" style="padding:0 14px 12px;color:var(--muted)">⚠️ AIS toont <b>alleen schepen die uitzenden</b>. De meeste pleziervaart doet dat niet, en een positie is enkele minuten oud. Een leeg stuk kaart betekent niet dat daar niets vaart — dit vervangt het uitkijken niet. EuRIS schermt bovendien de identiteit van vrijwel alle binnenvaart af, dus meestal is er géén scheepsnaam.</div>
+      </div>
+
+      <h2 class="sec">Test &amp; app</h2>
+      <div class="card">
+        <div class="set"><div><div class="lab">Simulatiemodus</div><div class="sub">Tik op de kaart om een positie te kiezen — test zonder op het water te zijn.</div></div>
+          <label class="switch"><input type="checkbox" id="setSim"><span class="slider"></span></label></div>
+        <div class="set"><div><div class="lab">Test-melding</div><div class="sub">Speel een voorbeeldwaarschuwing af.</div></div>
+          <button class="filebtn" id="btnTestAlert" style="font-weight:800">Test</button></div>
+        <div class="set"><div><div class="lab">Over &amp; installeren</div><div class="sub">Uitleg, bronnen, installeren op je toestel.</div></div>
+          <button class="filebtn" id="btnAbout" style="font-weight:800">Open</button></div>
+      </div>
+      <div class="hint">Versie 4.9.0 · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
+    </section>
+  </main>
+
+  <nav>
+    <button data-view="varen" class="active"><span class="ni">📻</span>Varen</button>
+    <button data-view="map"><span class="ni">🗺️</span>Kaart</button>
+    <button data-view="safe"><span class="ni">🚨</span>Veiligheid</button>
+    <button data-view="obj"><span class="ni">📋</span>Kanalen</button>
+    <button data-view="set"><span class="ni">⚙️</span>Instel</button>
+  </nav>
+</div>
+
+<div id="toast">
+  <div class="ti" id="toastIco">🔔</div>
+  <div class="tt"><div class="h" id="toastH">Melding</div><div class="p" id="toastP"></div></div>
+  <button id="toastOk">OK</button>
+</div>
+
+<div class="modal" id="modal"><div class="box" id="modalBox"></div></div>
+<div class="modal" id="mayday"><div class="box" id="maydayBox"></div></div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<!-- ?v= meeverhogen bij elke release: garandeert dat browsers de nieuwe JS pakken
+     en niet een oude versie uit hun HTTP-cache blijven serveren. -->
+<script src="config.js?v=4.9.0"></script>
+<script src="data.js?v=4.9.0"></script>
+<script src="vhf-points.js?v=4.9.0"></script>
+<script src="fairway-depths.js?v=4.9.0"></script>
+<script src="obstacles.js?v=4.9.0"></script>
+<script src="stations.js?v=4.9.0"></script>
+<script src="app.js?v=4.9.0"></script>
+</body>
+</html>

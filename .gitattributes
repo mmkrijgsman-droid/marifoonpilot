@@ -1,0 +1,17 @@
+# Standaard: Git bepaalt zelf wat tekst is en normaliseert regeleindes naar LF in de repo.
+* text=auto
+
+# LET OP - dit is geen cosmetica. De dieptetegels zijn een binair int16-raster
+# (zie tools/build-depth-rws.py). Zou Git ze als tekst behandelen, dan "corrigeert" hij
+# op Windows de regeleindes en zijn de bytes stil kapot: 0x0A wordt 0x0D0A en elke
+# diepte daarachter schuift op. Daarom expliciet binair, en niet op autodetectie
+# vertrouwen.
+*.mpd binary
+
+# Overige binaire bestanden
+*.png binary
+*.tif binary
+*.ico binary
+
+# Windows-scripts hebben CRLF nodig om betrouwbaar te draaien
+*.ps1 text eol=crlf

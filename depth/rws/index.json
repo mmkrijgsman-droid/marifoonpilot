@@ -1,0 +1,351 @@
+{
+ "formaat": "mpd1",
+ "bron": "Rijkswaterstaat, bodemhoogte IJsselmeergebied (WCS)",
+ "dienst": "https://geo.rijkswaterstaat.nl/services/ogc/gdr/bodemhoogte_ijsselmeergebied/ows",
+ "opgehaald": "2026-08-29",
+ "eenheid": "cm bodemhoogte t.o.v. NAP, negatief = onder NAP",
+ "referentievlak": "NAP",
+ "let_op": "Bodemhoogte, geen diepte. Diepte = waterpeil - bodemhoogte. Per cel de ondiepste meting van de nieuwste beschikbare jaargang. Geen garantie voor kielspeling.",
+ "celmaat": 20,
+ "tegelstap": 5120,
+ "crs": "EPSG:28992",
+ "jaargangen_gebruikt": {
+  "2022": 23,
+  "2013": 12,
+  "2006": 9
+ },
+ "tegels": [
+  {
+   "bestand": "138240_501760.mpd",
+   "x": 138240,
+   "y": 501760,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022
+   ],
+   "bodem_min": -4.56,
+   "bodem_max": -3.63
+  },
+  {
+   "bestand": "138240_506880.mpd",
+   "x": 138240,
+   "y": 506880,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022
+   ],
+   "bodem_min": -4.45,
+   "bodem_max": -3.84
+  },
+  {
+   "bestand": "138240_512000.mpd",
+   "x": 138240,
+   "y": 512000,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 89.8,
+   "jaren": [
+    2022,
+    2013,
+    2006
+   ],
+   "bodem_min": -4.39,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "138240_517120.mpd",
+   "x": 138240,
+   "y": 517120,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 76.1,
+   "jaren": [
+    2022,
+    2013,
+    2006
+   ],
+   "bodem_min": -3.45,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "138240_522240.mpd",
+   "x": 138240,
+   "y": 522240,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 93.5,
+   "jaren": [
+    2006
+   ],
+   "bodem_min": -0.03,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "138240_527360.mpd",
+   "x": 138240,
+   "y": 527360,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 94.2,
+   "jaren": [
+    2022,
+    2013,
+    2006
+   ],
+   "bodem_min": -6.0,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "143360_501760.mpd",
+   "x": 143360,
+   "y": 501760,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022
+   ],
+   "bodem_min": -5.46,
+   "bodem_max": -3.98
+  },
+  {
+   "bestand": "143360_506880.mpd",
+   "x": 143360,
+   "y": 506880,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022
+   ],
+   "bodem_min": -4.63,
+   "bodem_max": -4.04
+  },
+  {
+   "bestand": "143360_512000.mpd",
+   "x": 143360,
+   "y": 512000,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022
+   ],
+   "bodem_min": -4.27,
+   "bodem_max": -3.48
+  },
+  {
+   "bestand": "143360_517120.mpd",
+   "x": 143360,
+   "y": 517120,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 97.4,
+   "jaren": [
+    2022,
+    2013,
+    2006
+   ],
+   "bodem_min": -5.57,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "143360_522240.mpd",
+   "x": 143360,
+   "y": 522240,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 88.7,
+   "jaren": [
+    2022,
+    2013,
+    2006
+   ],
+   "bodem_min": -5.53,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "143360_527360.mpd",
+   "x": 143360,
+   "y": 527360,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 90.3,
+   "jaren": [
+    2022,
+    2013,
+    2006
+   ],
+   "bodem_min": -7.73,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "148480_501760.mpd",
+   "x": 148480,
+   "y": 501760,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022
+   ],
+   "bodem_min": -29.94,
+   "bodem_max": -4.34
+  },
+  {
+   "bestand": "148480_506880.mpd",
+   "x": 148480,
+   "y": 506880,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022
+   ],
+   "bodem_min": -36.31,
+   "bodem_max": -0.62
+  },
+  {
+   "bestand": "148480_512000.mpd",
+   "x": 148480,
+   "y": 512000,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022
+   ],
+   "bodem_min": -28.13,
+   "bodem_max": -1.03
+  },
+  {
+   "bestand": "148480_517120.mpd",
+   "x": 148480,
+   "y": 517120,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 99.8,
+   "jaren": [
+    2022,
+    2013
+   ],
+   "bodem_min": -34.04,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "148480_522240.mpd",
+   "x": 148480,
+   "y": 522240,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 96.2,
+   "jaren": [
+    2022,
+    2013,
+    2006
+   ],
+   "bodem_min": -6.1,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "148480_527360.mpd",
+   "x": 148480,
+   "y": 527360,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022
+   ],
+   "bodem_min": -7.01,
+   "bodem_max": -1.27
+  },
+  {
+   "bestand": "153600_501760.mpd",
+   "x": 153600,
+   "y": 501760,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 96.2,
+   "jaren": [
+    2022,
+    2013,
+    2006
+   ],
+   "bodem_min": -28.18,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "153600_506880.mpd",
+   "x": 153600,
+   "y": 506880,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 99.9,
+   "jaren": [
+    2022,
+    2013
+   ],
+   "bodem_min": -42.22,
+   "bodem_max": -0.03
+  },
+  {
+   "bestand": "153600_512000.mpd",
+   "x": 153600,
+   "y": 512000,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022,
+    2013
+   ],
+   "bodem_min": -40.34,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "153600_517120.mpd",
+   "x": 153600,
+   "y": 517120,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022,
+    2013
+   ],
+   "bodem_min": -4.55,
+   "bodem_max": -0.01
+  },
+  {
+   "bestand": "153600_522240.mpd",
+   "x": 153600,
+   "y": 522240,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022
+   ],
+   "bodem_min": -17.01,
+   "bodem_max": -3.49
+  },
+  {
+   "bestand": "153600_527360.mpd",
+   "x": 153600,
+   "y": 527360,
+   "breedte": 256,
+   "hoogte": 256,
+   "dekking": 100.0,
+   "jaren": [
+    2022
+   ],
+   "bodem_min": -14.82,
+   "bodem_max": -2.94
+  }
+ ]
+}
