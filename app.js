@@ -591,7 +591,7 @@ function initMap(){
     if(routeMode){ route.push({lat:e.latlng.lat,lon:e.latlng.lng}); if(!pos && route.length===1) hintNoPos(); drawRouteMarkers(); drawPrediction(); }
     else if(S.sim){ simSet(e.latlng.lat,e.latlng.lng); }
   });
-  map.on("zoomend moveend",()=>{ drawPrediction(); drawNationalVhf(); drawFairwayDepths(); planAis(); });
+  map.on("zoomend moveend",()=>{ drawPrediction(); drawNationalVhf(); drawFairwayDepths(); planAis(); drawWind(); });
   // routepunten veranderen van vorm per zoomniveau, dus opnieuw opbouwen na zoomen
   let laatsteDetail=null;
   map.on("zoomend",()=>{ const d=wpDetail(); if(d!==laatsteDetail){ laatsteDetail=d; drawRouteMarkers(); } });
@@ -870,10 +870,14 @@ const WIND_MODELLEN = [
   { id:"knmi_harmonie_arome_netherlands", naam:"KNMI Harmonie 2 km" },
   { id:"ecmwf_ifs025",                    naam:"ECMWF IFS" }
 ];
-const WIND_MAX_PUNTEN = 12;
-const WIND_STAP_M = 4000;      // richtafstand tussen meetpunten; bepaalt hoeveel veren
-                               // je op de route krijgt. Lager = meer detail, maar ze
-                               // mogen elkaar op het scherm niet gaan overlappen.
+/* Meetdichtheid en tekendichtheid zijn bewust twee verschillende dingen. We halen fijn
+ * op - om de 2 km - zodat de gekleurde band de wind langs de route nauwkeurig volgt. Hoe
+ * veel VEREN je ziet hangt af van je zoomniveau: op het scherm houden we ze minstens
+ * WIND_MIN_PX uit elkaar. Zoom je in, dan verschijnen er vanzelf meer. Zo staan ze nooit
+ * te ver uit elkaar en nooit op een hoop, zonder opnieuw op te halen. */
+const WIND_MAX_PUNTEN = 24;
+const WIND_STAP_M = 2000;      // richtafstand tussen meetpunten (ophalen)
+const WIND_MIN_PX = 62;        // minimale afstand tussen twee veren op het scherm
 
 let wind={ punten:[], data:null, sleutel:null, bezig:false, fout:null, vertrekU:0 };
 
@@ -957,12 +961,18 @@ function windOp(i, t){
 /* De hoek tussen de wind en je koers. 0 graden = pal op de neus, 180 = pal van achteren.
  * Dit is het getal waar een zeiler op stuurt; de absolute windrichting zegt op zichzelf
  * niets over of een traject te zeilen is. */
+/* Kleuren zijn hier functioneel, geen opsmuk: je moet van een afstand zien welk stuk
+ * zich laat zeilen. Twee eisen. Ze moeten onderling te onderscheiden zijn - eerder deelden
+ * halve en ruime wind hetzelfde groen, dus die kon je niet uit elkaar houden. En ze moeten
+ * het uithouden BOVEN WATER: het lichtblauw dat hier voor "voor de wind" stond viel op de
+ * OSM-kaart volledig weg tegen het meer. Rood, oranje, groen en paars houden stand op
+ * zowel het lichte OSM-water als op satelliet. */
 const WIND_HOEKEN=[
-  { tot:35,  naam:"pal op de neus", kort:"tegen", kleur:"#ff5d5d", kruisen:true },
-  { tot:60,  naam:"aan de wind",    kort:"aan",   kleur:"#ffce6b" },
-  { tot:110, naam:"halve wind",     kort:"half",  kleur:"#7fe0a0" },
-  { tot:150, naam:"ruime wind",     kort:"ruim",  kleur:"#7fe0a0" },
-  { tot:181, naam:"voor de wind",   kort:"voor",  kleur:"#8fdcff" }
+  { tot:35,  naam:"pal op de neus", kort:"tegen", kleur:"#ff2d20", kruisen:true },
+  { tot:60,  naam:"aan de wind",    kort:"aan",   kleur:"#ff9f0a" },
+  { tot:110, naam:"halve wind",     kort:"half",  kleur:"#34d058" },
+  { tot:150, naam:"ruime wind",     kort:"ruim",  kleur:"#12a05c" },
+  { tot:181, naam:"voor de wind",   kort:"voor",  kleur:"#b45cff" }
 ];
 function windHoek(koers, uit){
   const h=angleDiff(koers, uit);
@@ -1003,7 +1013,11 @@ function windTrajecten(){
  * ook tussen de boeisymbolen waar een getalletje verdrinkt. */
 function windVeerIcon(w, hoek){
   const g=sc(46), c=g/2;
-  const kleur = hoek ? hoek.kleur : "#bfeeff";
+  /* De veer is WIT, niet in de kleur van de hoek. Dat was hij eerst wel, en dan ligt een
+   * paarse veer op een paarse band en zie je hem niet. Zo heeft kleur precies een taak -
+   * de band vertelt de zeilbaarheid - en de veer een andere: richting en kracht. Wit met
+   * een donkere gloed houdt stand op elke ondergrond en op elke bandkleur. */
+  const kleur = "#ffffff";
   const kn=Math.max(0, Math.round(w.kn/5)*5);
   const staafTop=c-g*0.34, staafBod=c;
   const stapY=g*0.075, lang=g*0.20, kort=g*0.11;
@@ -1058,9 +1072,30 @@ function drawWindRoute(trajecten){
     const stuk=[puntOpAfstand(path,van)];
     for(let i=0;i<path.length;i++) if(cum[i]>van && cum[i]<tot) stuk.push(path[i]);
     stuk.push(puntOpAfstand(path,tot));
-    L.polyline(stuk,{color:(a.hoek?a.hoek.kleur:"#bfeeff"), weight:sc(8), opacity:.65,
+    L.polyline(stuk,{color:(a.hoek?a.hoek.kleur:"#bfeeff"), weight:sc(9), opacity:.8,
       lineCap:"round", lineJoin:"round", interactive:false}).addTo(windLayer);
   }
+}
+
+/* Welke veren tekenen we? Alle punten waarvan de vorige getekende veer ver genoeg weg
+ * staat op het SCHERM. Eerste en laatste altijd. Zo zit de dichtheid vast aan wat je ziet
+ * en niet aan hoe lang de route is. */
+function windZichtbaar(tr){
+  const met=tr.filter(t=>t.w);
+  if(met.length<3) return met;
+  const uit=[met[0]];
+  let vorig=map.latLngToContainerPoint([met[0].pt.lat, met[0].pt.lon]);
+  for(let i=1;i<met.length-1;i++){
+    const px=map.latLngToContainerPoint([met[i].pt.lat, met[i].pt.lon]);
+    if(px.distanceTo(vorig)>=WIND_MIN_PX){ uit.push(met[i]); vorig=px; }
+  }
+  // Het eindpunt hoort erbij - daar kom je aan. Ligt het te dicht op de vorige veer, dan
+  // VERVANGT het die in plaats van ernaast te komen staan; anders raken de iconen elkaar.
+  const laatste=met[met.length-1];
+  const pxL=map.latLngToContainerPoint([laatste.pt.lat, laatste.pt.lon]);
+  if(pxL.distanceTo(vorig)>=WIND_MIN_PX || uit.length===1) uit.push(laatste);
+  else uit[uit.length-1]=laatste;
+  return uit;
 }
 
 function drawWind(){
@@ -1069,14 +1104,13 @@ function drawWind(){
   updateWindBadge();
   if(!S.wind || !wind.data) return;
   const tr=windTrajecten();
-  drawWindRoute(tr);
-  for(const t of tr){
-    if(!t.w) continue;
+  drawWindRoute(tr);                 // de band gebruikt ALLE punten: fijne kleurovergang
+  for(const t of windZichtbaar(tr)){ // de veren alleen wat past op dit zoomniveau
     L.marker([t.pt.lat,t.pt.lon],{icon:windVeerIcon(t.w,t.hoek),zIndexOffset:120})
       .bindPopup(windPopup(t)).addTo(windLayer);
     // Alleen het getal, klein en onder de veer. De richting zit al in de veer; een vol
     // tekstlabel per punt maakte er tussen de boeisymbolen een onleesbare brij van.
-    windGetal(t.pt.lat, t.pt.lon, fmtKn(t.w.kn), t.hoek?t.hoek.kleur:"#bfeeff");
+    windGetal(t.pt.lat, t.pt.lon, fmtKn(t.w.kn), "#ffffff");
   }
 }
 
@@ -1176,7 +1210,12 @@ function windPaneelBody(){
     ? '<p style="color:#ffce6b;margin:8px 0"><b>\u{1F4A8} Vlagen tot boven de 25 knopen</b> op '+hard+' meetpunt'
       + (hard>1?'en':'')+'.</p>'
     : '';
-  return waarschuwing + vlagen
+  const legenda = '<div style="display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 4px;font-size:12px">'
+    + WIND_HOEKEN.map(k=>'<span style="display:flex;align-items:center;gap:5px">'
+        + '<span style="width:16px;height:5px;border-radius:3px;background:'+k.kleur+';display:inline-block"></span>'
+        + escapeHtml(k.naam)+'</span>').join('')
+    + '</div>';
+  return waarschuwing + vlagen + legenda
     + '<div style="max-height:42vh;overflow:auto;margin-top:8px">'
     + '<table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>'+rijen+'</tbody></table></div>'
     + '<p style="color:var(--muted);font-size:12px;margin-top:10px">Bron: Open-Meteo — '
