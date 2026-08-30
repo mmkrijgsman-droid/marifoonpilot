@@ -4,6 +4,36 @@ Een GPS-vaarassistent die **automatisch het juiste marifoonkanaal** adviseert op
 Markermeer en de Waddenzee — op basis van je **positie én vaarrichting**. Werkt als **PWA** op
 **telefoon, tablet én laptop**, zónder app store, en altijd schermvullend.
 
+## Nieuw in v5.1 — GPS staat meteen aan, en je kiest zelf waar de route begint
+
+- 📡 **Geen "GPS starten" meer.** De app vraagt de locatie zodra hij opent; dat is ook het
+  moment waarop Android/Chrome om toestemming vraagt. Op het water zet je geen knop meer aan.
+- 🔎 **Eerlijke reden als er geen positie is.** *Geen fix* (de ontvanger zoekt nog) is iets
+  anders dan *geweigerd* (de browser mag niet) en weer iets anders dan *geblokkeerd* (de app
+  draait niet op https). Alle drie krijgen hun eigen melding, met wat je eraan kunt doen.
+  Alleen bij weigeren of blokkeren komt de knop **Locatie opnieuw proberen** terug — die tik
+  is nodig, want een browser vraagt pas opnieuw na een gebaar van de gebruiker.
+- 🚩 **Bij een nieuwe route vraagt de app waar hij begint:** *vanaf mijn GPS-positie* (de lijn
+  schuift mee terwijl je vaart) of *zelf een startpunt aanklikken* (blijft liggen waar je hem
+  zet — voor een tocht die morgen pas begint). Dat startpunt is een groene **S** op de kaart:
+  verslepen kan, en aantikken zet de route terug op je eigen positie.
+- Zonder GPS-fix staat de eerste keuze uit, in plaats van dat de app een positie aanneemt.
+- 🗺 **De vraag staat op de kaart, niet erover.** Hetzelfde matglazen paneel als de rest van
+  de kaartbediening, onderaan waar je duim zit, en zodra je een startpunt mag aanwijzen
+  krimpt het tot één regel — juist dán moet je de kaart kunnen zien. Kompasroos en
+  zoomknoppen schuiven ervoor omhoog in plaats van eronder te verdwijnen.
+- 📐 **Het bovenpaneel is bijna gehalveerd** (op de telefoon van ~127 naar 42 px). Het
+  pictogram staat naast de waarde in plaats van erboven, en zonder route staan kanaal,
+  object, afstand én snelheid gewoon op één regel: afstand en aankomsttijd hebben dan
+  niets te zeggen, en twee streepjes tonen is ruis. Zodra er een route ligt komt de tweede
+  regel met alle drie de cijfers terug. Op de kaart krimpt ook de koptekst tot een dunne
+  statusstrook. Alles wat er stond staat er nog — er is alleen meer kaart.
+
+> ⚠️ **Locatie werkt alleen op https.** Open je de app via `http://<ip-adres>` of rechtstreeks
+> vanaf een bestand, dan geeft de browser géén locatie en vraagt hij er ook niet om — precies
+> het beeld "hij vraagt niets en doet niets". Zet hem op Netlify of GitHub Pages (zie
+> *Installeren op je toestel*), of test op `localhost`.
+
 ## Nieuw in v4.7 — landelijke vaarwegdieptes
 
 - 🌊 De kaartknop **Diepte** toont nu **1.332 officiële RWS-vaarwegdieptetrajecten** in heel

@@ -471,6 +471,17 @@ function showToast(ico,h,p,opt={}){
 function hideToast(){ $("toast").classList.remove("show"); syncToastPush(); }
 /* De toast dekt de kaartknoppen bovenaan af (en blijft staan bij een kanaalwissel).
  * Duw de vooruitblik-balk zolang precies onder de toast door. */
+/* Het bovenpaneel is nu eens één regel (geen route) en dan weer twee (met route). De
+ * bedieningszuil moet er precies onder beginnen, dus meten we het in plaats van een vast
+ * getal te kiezen dat in het ene geval botst en in het andere een gat laat. */
+function syncKaartKop(){
+  const k=$("mapTop");
+  if(k && k.offsetHeight) document.documentElement.style.setProperty("--kaartkop", k.offsetHeight+"px");
+  // Zelfde verhaal onderaan: het vraagpaneel duwt de kompasroos en de zoomknoppen omhoog
+  // in plaats van ze eronder te laten verdwijnen.
+  const v=$("mapAsk");
+  if(v) document.documentElement.style.setProperty("--vraaghoogte", (v.classList.contains("show")?v.offsetHeight:0)+"px");
+}
 function syncToastPush(){
   const t=$("toast"), on=t.classList.contains("show");
   document.documentElement.style.setProperty("--toast-push", on ? (t.offsetHeight+10)+"px" : "0px");
@@ -487,16 +498,97 @@ function beep(freqs=[784,1046]){
   }catch(e){}
 }
 
-/* ---------------- GPS ---------------- */
-function startGPS(){
-  if(!("geolocation" in navigator)){ showToast("⚠️","Geen GPS","Dit apparaat/browser ondersteunt geen locatie."); return; }
-  unlockAudio();
-  if(S.notify && "Notification" in window && Notification.permission==="default") Notification.requestPermission();
-  $("btnStart").textContent="GPS actief…";
+/* ---------------- GPS ----------------
+ * De app zet GPS zelf aan zodra hij start — op het water wil je varen, geen knop zoeken.
+ * Er is daarom geen "GPS starten" meer. Wat er wél is: eerlijk zeggen waaróm er geen
+ * positie is. "Geen fix" en "de browser vraagt niet eens om toestemming" zijn twee heel
+ * verschillende problemen, en alleen het tweede los je op met een instelling.
+ */
+const GPS_OPTS={enableHighAccuracy:true,maximumAge:1500,timeout:15000};
+let gpsTekst="GPS start…", gpsWatchdog=null, gpsPermStatus=null;
+
+/* Geolocation werkt alleen in een beveiligde context: https, of localhost. Draait de app
+ * op http://<lan-ip> of vanaf file://, dan weigert de browser stilletjes — hij vraagt niets
+ * en levert niets. Dat is precies het beeld "Android vraagt niet om toestemming", dus
+ * benoemen we het in plaats van het als "geen fix" te verpakken. */
+function gpsBlokkade(){
+  if(!("geolocation" in navigator)) return "Dit apparaat of deze browser heeft geen locatievoorziening.";
+  // file:// telt in Chrome wél als beveiligde context, maar geeft alsnog geen locatie:
+  // er is geen herkomst om de toestemming aan te hangen. Apart benoemen dus.
+  if(location.protocol==="file:") return "De app is als los bestand geopend (file://). Browsers geven dan geen locatie. "+
+    "Zet de map op een https-adres (Netlify of GitHub Pages) of serveer hem via localhost.";
+  if(!window.isSecureContext) return "De app draait op "+location.protocol+"//"+(location.host||"onbekend")+
+    " en dat is geen beveiligde verbinding. Browsers geven daar geen locatie en vragen er ook niet om. "+
+    "Zet de app op een https-adres (Netlify of GitHub Pages) of open hem via localhost.";
+  return null;
+}
+function setGpsTekst(t,klasse){
+  gpsTekst=t;
+  const dot=$("gdot"), info=$("gpsInfo");
+  if(dot) dot.className="gdot "+(klasse||"none");
+  if(info) info.textContent = S.sim ? "Simulatie" : t;
+}
+/* De herstelknop staat er alleen als er iets te herstellen valt. Een tik van de gebruiker
+ * telt als gebaar, en pas daarna wil de browser opnieuw om toestemming vragen. */
+function toonGpsHerstel(aan,label){
+  const b=$("btnGpsFix"); if(!b) return;
+  b.hidden=!aan;
+  if(label) b.textContent=label;
+}
+function startGPS(doorGebruiker){
+  const blok=gpsBlokkade();
+  if(blok){
+    setGpsTekst("Locatie geblokkeerd");
+    showToast("⚠️","Geen locatie mogelijk",blok,{sticky:true,warn:true});
+    toonGpsHerstel(true,"Opnieuw proberen");
+    return;
+  }
+  if(doorGebruiker) unlockAudio();
+  toonGpsHerstel(false);
+  setGpsTekst("Zoekt satellieten…");
   if(watchId!=null) navigator.geolocation.clearWatch(watchId);
-  watchId=navigator.geolocation.watchPosition(onPos,onErr,{enableHighAccuracy:true,maximumAge:1500,timeout:15000});
+  watchId=navigator.geolocation.watchPosition(onPos,onErr,GPS_OPTS);
+  // Eén losse vraag ernaast: bij een koude start blijft watchPosition soms minutenlang
+  // stil terwijl er allang een grove netwerkpositie is. Dan staat er tenminste íéts.
+  navigator.geolocation.getCurrentPosition(onPos,()=>{},{enableHighAccuracy:false,timeout:20000,maximumAge:120000});
+  volgGpsPermissie();
+  clearTimeout(gpsWatchdog);
+  gpsWatchdog=setTimeout(()=>{ if(!pos && !S.sim) geenFixHint(); },25000);
+}
+function geenFixHint(){
+  if(gpsPermStatus==="denied") return;   // daarvoor is er al een duidelijkere melding
+  setGpsTekst("Geen fix");
+  showToast("\u{1F4E1}","Nog geen GPS-positie",
+    "Binnen of onder dek duurt dat lang. Kijk of locatie aanstaat bij Android → Instellingen → Locatie, en of de browser hem mag gebruiken. De app blijft ondertussen zoeken.",{});
+}
+/* Weet de browser al dat de toestemming geweigerd is, dan komt er nooit meer een vraag.
+ * Dat moet je zeggen — anders blijft het bij een stille "geen fix" en zoekt de schipper
+ * de fout bij zijn GPS-ontvangst. */
+function volgGpsPermissie(){
+  if(!navigator.permissions || !navigator.permissions.query) return;
+  navigator.permissions.query({name:"geolocation"}).then(st=>{
+    const lees=()=>{
+      gpsPermStatus=st.state;
+      if(st.state==="denied") meldGeweigerd();
+      else if(st.state==="granted"){ toonGpsHerstel(false); if(watchId==null) startGPS(false); }
+    };
+    lees(); st.onchange=lees;
+  }).catch(()=>{});
+}
+function meldGeweigerd(){
+  setGpsTekst("Locatie geweigerd");
+  toonGpsHerstel(true,"Locatie opnieuw proberen");
+  // Staat de app op het beginscherm, dan is er geen adresbalk en dus geen slotje om aan te
+  // tikken: die route bestaat alleen in de browser. Verwijs dan naar de app-instellingen.
+  const opBeginscherm = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone===true;
+  const waar = opBeginscherm
+    ? "Ga naar Android → Instellingen → Apps → MarifoonPilot → Machtigingen → Locatie → Toestaan. Werkt dat niet, verwijder de app van je beginscherm en zet hem er opnieuw op; de vraag komt dan terug."
+    : "In Chrome: tik het slotje links in de adresbalk → Machtigingen → Locatie → Toestaan. Staat dat goed, kijk dan bij Android → Instellingen → Apps → Chrome → Machtigingen → Locatie.";
+  showToast("⚠️","Locatie geweigerd","De browser mag je locatie niet gebruiken. "+waar,{sticky:true,warn:true});
 }
 function onPos(p){
+  clearTimeout(gpsWatchdog); gpsWatchdog=null;
+  toonGpsHerstel(false);
   if(S.sim) return;
   const c=p.coords;
   prevPos=pos;
@@ -508,10 +600,19 @@ function onPos(p){
   render(); onAnchorFix();
   if(map && !mapCentered){ map.setView([pos.lat,pos.lon],12); mapCentered=true; }
 }
-function onErr(e){ updateGpsBadge(null); if(e.code===1) showToast("⚠️","Locatie geweigerd","Sta locatie toe in je browserinstellingen.",{}); }
+function onErr(e){
+  if(e.code===1){   // geweigerd: watchPosition levert hierna niets meer, dus opruimen
+    if(watchId!=null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
+    clearTimeout(gpsWatchdog); gpsWatchdog=null;
+    meldGeweigerd(); return;
+  }
+  // code 2 (geen fix) en 3 (te traag): de browser blijft zelf doorzoeken, dus alleen status
+  if(!pos) setGpsTekst(e.code===3?"Zoekt… (traag)":"Geen fix");
+  updateGpsBadge(pos?pos.acc:null);
+}
 function updateGpsBadge(acc){
   const dot=$("gdot"), info=$("gpsInfo");
-  if(acc==null){ dot.className="gdot none"; info.textContent=S.sim?"Simulatie":"Geen fix"; return; }
+  if(acc==null){ dot.className="gdot none"; info.textContent=S.sim?"Simulatie":gpsTekst; return; }
   dot.className="gdot "+(acc<25?"good":""); info.textContent="±"+Math.round(acc)+" m";
 }
 
@@ -556,6 +657,12 @@ function toggleAnchor(){
 /* ---------------- Kaart ---------------- */
 let map=null, boat=null, mapCentered=false, overlays={}, baseLayers={}, curBase="osm", predLayer=null, nationalVhfLayer=null, fairwayDepthLayer=null, aisLayer=null, windLayer=null;
 let route=[], routeMode=false, lastBlockedKey=null, pointMarkers=[], routeLayer=null;
+/* Waar de route begint. null = vanaf de live GPS-positie, dus de lijn schuift mee terwijl
+ * je vaart. Een vast punt is een {lat,lon} dat je zelf op de kaart hebt aangewezen — handig
+ * om thuis een tocht van morgen uit te zetten, of om vanaf de haven te rekenen waar je nog
+ * niet ligt. kiestStartpunt betekent: de volgende tik op de kaart is dat startpunt. */
+let routeStart=null, kiestStartpunt=false;
+function routeOrigin(){ return routeStart || (pos ? {lat:pos.lat,lon:pos.lon} : null); }
 /* Alles op de kaart (pins, bolletjes, labels) schaalt mee met --mui, zodat de
  * leesafstand-instelling niet alleen het Varen-dashboard maar ook de kaart raakt. */
 let MUI=1;
@@ -595,7 +702,8 @@ function initMap(){
   routeLayer=L.layerGroup().addTo(map);
   boat=L.marker([52.75,5.35],{icon:boatIcon(0),zIndexOffset:1000});
   map.on("click",e=>{
-    if(routeMode){ route.push({lat:e.latlng.lat,lon:e.latlng.lng}); if(!pos && route.length===1) hintNoPos(); drawRouteMarkers(); drawPrediction(); }
+    if(kiestStartpunt){ zetRouteStart(e.latlng.lat,e.latlng.lng); }
+    else if(routeMode){ route.push({lat:e.latlng.lat,lon:e.latlng.lng}); if(!routeOrigin() && route.length===1) hintNoPos(); drawRouteMarkers(); drawPrediction(); }
     else if(S.sim){ simSet(e.latlng.lat,e.latlng.lng); }
   });
   map.on("zoomend moveend",()=>{ drawPrediction(); drawNationalVhf(); drawFairwayDepths(); planAis(); drawWind(); updateSchaal(); });
@@ -1554,12 +1662,14 @@ function drawPrediction(){
   if(draggingWp) return;   // tijdens het slepen doet de lichte voorbeeldlijn het werk
   readMui();
   predLayer.clearLayers();
-  if(!pos){ updatePredBadge(null); return; }
+  const origin=routeOrigin();
+  if(!origin){ updatePredBadge(null); return; }
   const P=predParams();
   const stepM=P.v*P.interval*60;
 
-  // Afstandsringen vanaf de boot — fel en met labels
-  if(S.predRings){
+  // Afstandsringen vanaf de boot — fel en met labels. Alleen met een echte positie:
+  // een ring om een aangeklikt startpunt zegt niets over waar jij over een half uur bent.
+  if(S.predRings && pos){
     for(let k=1;k<=P.count;k++){
       const rM=stepM*k;
       L.circle([pos.lat,pos.lon],{radius:rM,color:"#00e5ff",weight:2,opacity:.9,fill:false,dashArray:"7 6",interactive:false}).addTo(predLayer);
@@ -1570,9 +1680,9 @@ function drawPrediction(){
   // Pad bepalen: de getekende route, anders een projectie langs de huidige koers
   let path=null, isRoute=false;
   if(route.length){
-    path=[[pos.lat,pos.lon],...route.map(p=>[p.lat,p.lon])];
+    path=[[origin.lat,origin.lon],...route.map(p=>[p.lat,p.lon])];
     isRoute=true;
-  } else if(S.predDots){
+  } else if(S.predDots && pos){
     const c=deriveCourse().course;
     if(c!=null){
       const cosLat=Math.cos(rad(pos.lat)), d=stepM*P.count*1.001;   // marge zodat het laatste bolletje meetelt
@@ -1643,11 +1753,13 @@ function updatePredBadge(P, rt){
     if(t.parentElement) t.parentElement.title = "Aankomst over "+fmtDur(min)+stops;
     if(a.parentElement) a.parentElement.title = "Lengte van de route";
     if(kaart) kaart.classList.add("metroute");
+    syncKaartKop();
   } else {
     a.textContent="–"; t.textContent="–";
     if(t.parentElement) t.parentElement.title = "Aankomsttijd verschijnt zodra je een route tekent";
     if(a.parentElement) a.parentElement.title = "Routelengte verschijnt zodra je een route tekent";
     if(kaart) kaart.classList.remove("metroute");
+    syncKaartKop();
   }
 }
 /* ---- Routepunten bewerken ----
@@ -1689,7 +1801,8 @@ function removeWaypoint(i){
 function insertWaypointAfter(i){
   // nieuw punt halverwege naar het volgende punt, of een stukje voorbij het laatste
   const a=route[i];
-  const b=route[i+1] || (pos ? {lat:a.lat+(a.lat-pos.lat)*0.3, lon:a.lon+(a.lon-pos.lon)*0.3} : {lat:a.lat+0.01, lon:a.lon+0.01});
+  const o=routeOrigin();
+  const b=route[i+1] || (o ? {lat:a.lat+(a.lat-o.lat)*0.3, lon:a.lon+(a.lon-o.lon)*0.3} : {lat:a.lat+0.01, lon:a.lon+0.01});
   route.splice(i+1,0,{lat:(a.lat+b.lat)/2, lon:(a.lon+b.lon)/2});
   map.closePopup(); lastBlockedKey=null;
   drawRouteMarkers(); drawPrediction();
@@ -1700,7 +1813,7 @@ function insertWaypointAfter(i){
  * In plaats daarvan tonen we één lichte voorbeeldlijn die we met setLatLngs bijwerken —
  * geen DOM die verdwijnt, dus geen race — en rekenen we alles opnieuw bij het loslaten. */
 let draggingWp=false, dragLine=null;
-function livePath(){ return pos ? [[pos.lat,pos.lon],...route.map(p=>[p.lat,p.lon])] : route.map(p=>[p.lat,p.lon]); }
+function livePath(){ const o=routeOrigin(); return o ? [[o.lat,o.lon],...route.map(p=>[p.lat,p.lon])] : route.map(p=>[p.lat,p.lon]); }
 let dragWatchdog=null;
 function endWpDrag(){
   clearTimeout(dragWatchdog); dragWatchdog=null;
@@ -1721,6 +1834,30 @@ function drawRouteMarkers(){
   // vangnet: raakt een sleep onderbroken zonder dragend, dan zou draggingWp blijven staan
   // en werkt de vooruitblik nooit meer bij. Elke routewijziging zet de boel weer schoon.
   draggingWp=false; dragLine=null;
+  /* Een vast startpunt tekenen we altijd, ook ver uitgezoomd: dat ene punt is geen
+   * rommel op de kaart maar het anker van de hele route. */
+  if(routeStart){
+    const sz=Math.max(30, sc(30));
+    const ico=L.divIcon({className:"",iconSize:[sz,sz],iconAnchor:[sz/2,sz/2],
+      html:`<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:#0b3a14;
+        border:3px solid #7bf57b;color:#7bf57b;display:flex;align-items:center;justify-content:center;
+        font-size:${Math.round(sz*0.48)}px;font-weight:900;box-shadow:0 1px 5px rgba(0,0,0,.7);cursor:grab">S</div>`});
+    const sm=L.marker([routeStart.lat,routeStart.lon],{draggable:true,icon:ico,zIndexOffset:950}).addTo(routeLayer);
+    sm.on("dragstart",()=>{ endWpDrag(); draggingWp=true; predLayer.clearLayers();
+      dragLine=L.polyline(livePath(),{color:"#ffce6b",weight:3,dashArray:"9 6",interactive:false}).addTo(routeLayer); });
+    sm.on("drag",()=>{ const ll=sm.getLatLng(); routeStart={lat:ll.lat,lon:ll.lng};
+      if(dragLine) dragLine.setLatLngs(livePath()); armDragWatchdog(); });
+    sm.on("dragend",()=>{ endWpDrag(); lastBlockedKey=null; drawPrediction(); });
+    const terug = pos
+      ? `<button onclick="wisRouteStart()" style="width:100%;padding:9px;border:0;border-radius:9px;background:#0f1f30;color:#bfeeff;font-weight:800">📍 Toch vanaf mijn positie</button>`
+      : `<div style="font-size:12px;color:#ffce6b">Er is nog geen eigen positie om op terug te vallen.</div>`;
+    sm.bindPopup(
+      `<div style="text-align:center;min-width:170px">
+         <b>Startpunt van de route</b>
+         <div style="font-size:12px;color:#9db4cf;margin:4px 0 8px">Vast punt — sleep om te verplaatsen.</div>
+         ${terug}
+       </div>`);
+  }
   const detail=wpDetail();
   if(detail==="verborgen") return;      // ver uitgezoomd: alleen de routelijn
   route.forEach((w,i)=>{
@@ -1754,13 +1891,86 @@ function setRouteMode(on){
   routeMode=on;
   const b=$("tgRoute"); if(b) b.classList.toggle("on",on);
   if(map) map.getContainer().style.cursor = on?"crosshair":"";
-  if(!on) return;
-  if(!pos) hintNoPos();   // zonder positie is er geen beginpunt: zeg dat, teken niet stilletjes niets
-  else showToast("✏️","Route tekenen","Tik op de kaart om punten toe te voegen. Punten kun je altijd verslepen, of aantikken om ze te verwijderen — ook als deze knop uit staat.",{});
+  if(!on){ kiestStartpunt=false; sluitVraag(); return; }
+  // Een nieuwe route: eerst vastleggen waar hij begint. Ligt er al een route of een
+  // startpunt, dan is die vraag beantwoord en zou hem opnieuw stellen alleen in de weg zitten.
+  if(!route.length && !routeStart){ vraagRouteStart(); return; }
+  meldRouteTekenen();
 }
-function clearRoute(){ route=[]; setRouteMode(false); lastBlockedKey=null; wind.data=null; wind.sleutel=null;
+function meldRouteTekenen(){
+  const vanaf = routeStart ? "het startpunt dat je hebt aangewezen" : (S.sim?"je simulatiepositie":"je GPS-positie");
+  showToast("✏️","Route tekenen","De route begint bij "+vanaf+". Tik op de kaart om punten toe te voegen; verslepen of aantikken om te verwijderen kan altijd — ook als deze knop uit staat.",{});
+}
+/* Waar begint de route? Twee eerlijke antwoorden in plaats van een stille aanname.
+ * Vanaf de GPS-positie schuift de lijn mee terwijl je vaart — dat wil je onderweg. Een
+ * aangewezen startpunt blijft liggen waar je hem zet, zodat je thuis of in de haven een
+ * tocht kunt uitzetten die nog moet beginnen. Zonder fix is alleen het tweede mogelijk;
+ * dan zetten we die keuze uit in plaats van een positie te verzinnen.
+ *
+ * Het staat als matglazen paneel onderaan de kaart, niet als modaal venster eroverheen:
+ * de vraag gaat over de kaart, dus moet je de kaart kunnen blijven zien. */
+function vraagRouteStart(){
+  const paneel=$("mapAsk"); if(!paneel){ startRouteOpKaart(); return; }
+  const bron = S.sim ? "simulatiepositie" : "GPS-positie";
+  const knop=$("askGps");
+  $("askGpsT").textContent = "Vanaf mijn "+bron;
+  $("askGpsS").textContent = pos ? "De lijn schuift mee terwijl je vaart"
+                                 : "Nog geen "+bron+" — kan pas met een fix";
+  knop.disabled = !pos;
+  paneel.classList.remove("wacht");
+  paneel.classList.add("show");
+  document.body.classList.add("vraagt");
+  showView("map");
+  syncKaartKop();
+}
+function sluitVraag(){
+  const paneel=$("mapAsk"); if(paneel){ paneel.classList.remove("show","wacht"); }
+  document.body.classList.remove("vraagt");
+  syncKaartKop();
+}
+/* Vraag weg én de tekenmodus uit: wie annuleert, wil geen half aangezette modus overhouden. */
+function annuleerRouteStart(){
+  sluitVraag();
+  if(!route.length && !routeStart) setRouteMode(false);
+  else kiestStartpunt=false;
+}
+function startRouteVanafGps(){
+  sluitVraag();
+  routeStart=null; kiestStartpunt=false; lastBlockedKey=null;
+  drawRouteMarkers(); drawPrediction();
+  if(!pos){ hintNoPos(); return; }
+  meldRouteTekenen();
+}
+function startRouteOpKaart(){
+  kiestStartpunt=true; routeMode=true;
+  const b=$("tgRoute"); if(b) b.classList.add("on");
+  showView("map");
+  if(map) map.getContainer().style.cursor="crosshair";
+  // Het paneel krimpt tot één regel in plaats van plaats te maken voor een toast over de
+  // kaart: je moet juist nú de kaart kunnen zien om het punt te kunnen kiezen.
+  const paneel=$("mapAsk");
+  if(paneel){ paneel.classList.add("show","wacht"); document.body.classList.add("vraagt"); syncKaartKop(); }
+  else showToast("\u{1F449}","Tik het startpunt aan","De volgende tik op de kaart wordt het beginpunt van je route.",{sticky:true});
+}
+function zetRouteStart(lat,lon){
+  routeStart={lat,lon}; kiestStartpunt=false;
+  sluitVraag(); hideToast(); lastBlockedKey=null;
+  drawRouteMarkers(); drawPrediction();
+  showToast("\u{1F6A9}","Startpunt gezet","Tik nu de rest van je route aan. Het startpunt kun je verslepen, of aantikken om terug te gaan naar je eigen positie.",{});
+}
+function wisRouteStart(){
+  // Zonder eigen positie is er niets om op terug te vallen: dan zou de route haar beginpunt
+  // kwijtraken en van de kaart verdwijnen terwijl de punten er nog liggen. Dus weigeren.
+  if(!pos){ if(map) map.closePopup(); hintNoPos(); return; }
+  routeStart=null; kiestStartpunt=false; lastBlockedKey=null;
+  if(map) map.closePopup();
+  drawRouteMarkers(); drawPrediction();
+  showToast("📍","Terug naar je positie","De route begint weer bij je "+(S.sim?"simulatiepositie":"GPS-positie")+".",{});
+}
+function clearRoute(){ route=[]; routeStart=null; kiestStartpunt=false; sluitVraag(); setRouteMode(false);
+  lastBlockedKey=null; wind.data=null; wind.sleutel=null;
   drawRouteMarkers(); drawPrediction(); drawWind(); }
-function hintNoPos(){ showToast("📍","Nog geen positie","Start GPS of zet Simulatie aan (tik dan op de kaart), dan verschijnen de ringen/bolletjes vanaf je boot.",{}); }
+function hintNoPos(){ showToast("📍","Nog geen positie","Er is nog geen GPS-fix. Wacht tot de ontvanger er een heeft, wijs zelf een startpunt aan op de kaart (knop ✏️ Route), of zet Simulatie aan en tik op de kaart.",{}); }
 
 /* ---------------- Simulatie ---------------- */
 let lastSim=null;
@@ -1868,7 +2078,8 @@ function showView(v){
   document.querySelectorAll(".view").forEach(el=>el.classList.remove("active"));
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===v));
   $("view-"+v).classList.add("active");
-  if(v==="map" && map) setTimeout(()=>{ map.invalidateSize(); if(pos) map.setView([pos.lat,pos.lon]); },80);
+  document.body.classList.toggle("opkaart", v==="map");
+  if(v==="map" && map) setTimeout(()=>{ map.invalidateSize(); syncKaartKop(); if(pos) map.setView([pos.lat,pos.lon]); },80);
 }
 
 /* ---------------- Modals ---------------- */
@@ -1917,7 +2128,7 @@ const INTRO_HTML=`<h3>Welkom bij MarifoonPilot ⚓</h3>
   <li>📱 Telefoon dichtbij, tablet/laptop als cockpit op 2–3 m — stel in bij Instellingen.</li>
   <li>🧭 Geen boot? Zet <b>Simulatie</b> aan en tik op de kaart.</li></ul>
   <p style="color:#ffce6b"><b>Let op:</b> hulpmiddel, geen vervanging voor je marifoon of officiële vaarinformatie. Nood: kanaal 16.</p>
-  <button class="ok" onclick="closeModal(); if(!S.sim) startGPS();">Aan de slag</button>`;
+  <button class="ok" onclick="closeModal(); if(!S.sim) startGPS(true);">Aan de slag</button>`;
 
 /* ---------------- Lijsten ---------------- */
 function tag(conf){ return conf==="high"?'<span class="tag">✓ geverifieerd</span>':(conf==="medium"?'<span class="tag">⚠ 1 bron</span>':''); }
@@ -1989,7 +2200,10 @@ function initSettings(){
   bindRange("marginRange","marginVal","margin",v=>fmtNum(v,2)+" m");
   bindRange("anchorRad","anchorRadVal","anchorRadius",v=>v+" m");
   bindToggle("setSim","sim",on=>{ document.body.classList.toggle("sim",on); updateGpsBadge(on?null:(pos?pos.acc:null));
-    if(on){ showView("map"); showToast("🧭","Simulatie aan","Tik op de kaart om je positie te kiezen.",{}); } else lastSim=null; });
+    if(on){
+      if(watchId!=null){ navigator.geolocation.clearWatch(watchId); watchId=null; }   // ontvanger uit: de positie komt van de kaart
+      showView("map"); showToast("🧭","Simulatie aan","Tik op de kaart om je positie te kiezen.",{});
+    } else { lastSim=null; startGPS(true); } });
   $("setSim").checked=S.sim; document.body.classList.toggle("sim",S.sim);
   $("depthFile").addEventListener("change",e=>{ if(e.target.files[0]) loadDepthFile(e.target.files[0]); });
 
@@ -2057,15 +2271,17 @@ window.addEventListener("DOMContentLoaded",()=>{
   buildLists(); initSettings(); applyTheme(); applyDist();
 
   document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.view)));
-  $("btnStart").addEventListener("click",startGPS);
-  $("btnSim").addEventListener("click",()=>{ $("setSim").checked=true; S.sim=true; save(); document.body.classList.toggle("sim",true); showView("map"); showToast("🧭","Simulatie aan","Tik op de kaart om je positie te kiezen.",{}); });
+  const fix=$("btnGpsFix"); if(fix) fix.addEventListener("click",()=>startGPS(true));
+  $("btnSim").addEventListener("click",()=>{ $("setSim").checked=true; S.sim=true; save(); document.body.classList.toggle("sim",true);
+    if(watchId!=null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
+    updateGpsBadge(null); showView("map"); showToast("🧭","Simulatie aan","Tik op de kaart om je positie te kiezen.",{}); });
   $("btnAck").addEventListener("click",ackAlert);
   $("toastOk").addEventListener("click",()=>{
     if(pendingReload){ applyUpdate(); return; }
     if(needsAck) ackAlert(); else hideToast();
   });
   $("btnFs").addEventListener("click",toggleFullscreen);
-  $("btnLocate").addEventListener("click",()=>{ if(pos&&map) map.setView([pos.lat,pos.lon],13); else startGPS(); });
+  $("btnLocate").addEventListener("click",()=>{ if(pos&&map) map.setView([pos.lat,pos.lon],13); else startGPS(true); });
   // Lagen-popover: open aan de knop, dicht bij een tik op de kaart of op de knop zelf.
   const lagenKnop=$("btnLayers"), pop=$("layerPop");
   if(lagenKnop && pop){
@@ -2083,6 +2299,10 @@ window.addEventListener("DOMContentLoaded",()=>{
   $("tgDots").addEventListener("click",()=>{ S.predDots=!S.predDots; save(); $("tgDots").classList.toggle("on",S.predDots); drawPrediction(); if(S.predDots&&!pos) hintNoPos(); });
   $("tgRings").addEventListener("click",()=>{ S.predRings=!S.predRings; save(); $("tgRings").classList.toggle("on",S.predRings); drawPrediction(); if(S.predRings&&!pos) hintNoPos(); });
   $("tgRoute").addEventListener("click",()=>setRouteMode(!routeMode));
+  $("askGps").addEventListener("click",startRouteVanafGps);
+  $("askPick").addEventListener("click",startRouteOpKaart);
+  $("askClose").addEventListener("click",annuleerRouteStart);
+  $("askCancel").addEventListener("click",annuleerRouteStart);
   $("tgClear").addEventListener("click",clearRoute);
   $("btnMayday").addEventListener("click",openMayday);
   $("btnAnchor").addEventListener("click",toggleAnchor);
@@ -2096,7 +2316,19 @@ window.addEventListener("DOMContentLoaded",()=>{
   const layerSel=$("layerSel");
   if(layerSel) layerSel.addEventListener("change",e=>setBaseLayer(e.target.value));
 
+  syncKaartKop();
+  window.addEventListener("resize",syncKaartKop);
   registerSW();
+  /* GPS hoort vanaf de start te lopen: op het water zet je geen knop meer aan.
+   * Draait de simulatie, dan blijft de ontvanger uit — die positie komt van de kaart. */
+  if(S.sim) updateGpsBadge(null); else startGPS(false);
+  /* De AudioContext mag pas open na een gebaar. Vroeger deed de startknop dat; nu die weg
+   * is, doet de eerste tik of toetsaanslag het, anders blijft het kanaalalarm stil. */
+  ["pointerdown","keydown"].forEach(ev=>document.addEventListener(ev,unlockAudio,{once:true}));
+  /* Terug uit de achtergrond: Android bevriest de watch soms. Loopt er niets meer, herstart. */
+  document.addEventListener("visibilitychange",()=>{
+    if(!document.hidden && !S.sim && watchId==null && gpsPermStatus!=="denied") startGPS(false);
+  });
   tryAutoDepth();
   fetchTide(true);
   setInterval(()=>fetchTide(false), 60000);   // fetchTide bewaakt zelf het echte interval
