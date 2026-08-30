@@ -171,6 +171,132 @@
     padding:calc(5px * var(--mui)) calc(11px * var(--mui));font-size:calc(11.5px * var(--mui));font-weight:700;display:none;line-height:1.35}
   .leaflet-control-attribution{font-size:9px}
 
+
+  /* ---------- Kaartchroom v5: matglazen panelen ----------
+   * Eén recept voor elk zwevend paneel. De kaart is het instrument; de bediening
+   * hoort erboven te zweven, niet ernaast te staan. Vandaar half doorzichtig met
+   * een blur: je ziet dat er kaart onder zit, en het geheel leest als één laag in
+   * plaats van als losse kaartjes.
+   * Waar Safari/oudere Android geen backdrop-filter kan, valt hij terug op de
+   * dekkende achtergrondkleur - dat is de reden dat de alpha op .82 staat en niet
+   * lager: ook zonder blur moet de tekst leesbaar blijven.                      */
+  .ijs{background:rgba(8,18,28,.82);border:1px solid rgba(255,255,255,.10);
+    backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
+    box-shadow:0 10px 30px rgba(0,0,0,.30)}
+
+  /* Bovenpaneel: kanaal + object, streep, en de drie routecijfers */
+  .mapcard{position:absolute;left:10px;right:10px;top:calc(var(--safe-t) + 10px);z-index:600;
+    border-radius:calc(18px * var(--mui));padding:calc(11px * var(--mui)) calc(15px * var(--mui)) calc(12px * var(--mui));
+    transform:translateY(var(--toast-push,0px));transition:transform .3s cubic-bezier(.2,.9,.3,1)}
+  body.sim .mapcard{top:calc(var(--safe-t) + 8px + 28px * var(--mui))}
+  .mc-top{display:flex;align-items:center;gap:calc(9px * var(--mui))}
+  .mc-ch{color:var(--accent);font-size:calc(22px * var(--mui));font-weight:800;line-height:1;white-space:nowrap}
+  .mc-vhf{color:var(--muted);font-size:calc(10px * var(--mui));font-weight:800;letter-spacing:1px;
+    align-self:flex-end;padding-bottom:calc(3px * var(--mui))}
+  .mc-post{color:var(--fg);font-size:calc(13.5px * var(--mui));font-weight:700;flex:1;min-width:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mc-dist{color:var(--muted);font-size:calc(11.5px * var(--mui));font-weight:700;white-space:nowrap}
+  .mc-sep{height:1px;background:rgba(255,255,255,.12);margin:calc(10px * var(--mui)) 0 calc(9px * var(--mui))}
+  .mc-met{display:flex}
+  .mc-met > div{flex:1;display:flex;flex-direction:column;align-items:center;gap:calc(4px * var(--mui));min-width:0}
+  .mc-met b{font-size:calc(16px * var(--mui));font-weight:700;color:var(--fg);white-space:nowrap}
+  .mc-met svg{stroke:var(--muted);width:calc(18px * var(--mui));height:calc(18px * var(--mui));
+    fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+  /* Bedieningszuil rechts */
+  .maprail{position:absolute;right:10px;top:calc(var(--safe-t) + 150px * var(--mui));z-index:600;
+    width:calc(46px * var(--mui));border-radius:calc(23px * var(--mui));
+    display:flex;flex-direction:column;align-items:center;padding:calc(5px * var(--mui)) 0}
+  .railbtn{width:calc(46px * var(--mui));height:calc(46px * var(--mui));background:none;border:0;padding:0;
+    display:flex;align-items:center;justify-content:center;color:var(--muted)}
+  .railbtn.on{color:var(--accent)}
+  .railbtn svg{width:calc(21px * var(--mui));height:calc(21px * var(--mui));fill:none;stroke:currentColor;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .railsep{width:calc(26px * var(--mui));height:1px;background:rgba(255,255,255,.12)}
+
+  /* Lagen-popover */
+  .layerpop{position:absolute;right:calc(64px * var(--mui));top:calc(var(--safe-t) + 150px * var(--mui));z-index:601;
+    width:calc(214px * var(--mui));max-width:calc(100vw - 90px * var(--mui));
+    border-radius:calc(16px * var(--mui));padding:calc(11px * var(--mui)) calc(13px * var(--mui));display:none}
+  .layerpop.show{display:block}
+  .lp-kop{color:#6f88a5;font-size:calc(10px * var(--mui));font-weight:700;letter-spacing:1.2px;
+    padding-bottom:calc(6px * var(--mui))}
+  .lp-row{display:flex;align-items:center;gap:calc(9px * var(--mui));width:100%;background:none;border:0;
+    color:var(--muted);font-size:calc(13px * var(--mui));font-weight:600;padding:calc(7px * var(--mui)) 0;text-align:left}
+  .lp-row.on{color:#dffaff}
+  .lp-row svg{width:calc(18px * var(--mui));height:calc(18px * var(--mui));fill:none;stroke:currentColor;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+  .lp-row .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lp-sw{width:calc(32px * var(--mui));height:calc(19px * var(--mui));border-radius:999px;
+    background:var(--line);position:relative;flex:0 0 auto}
+  .lp-row.on .lp-sw{background:var(--accent)}
+  .lp-sw i{position:absolute;top:calc(2.5px * var(--mui));left:calc(2.5px * var(--mui));
+    width:calc(14px * var(--mui));height:calc(14px * var(--mui));border-radius:50%;background:#0a1622;
+    transition:left .15s ease}
+  .lp-row.on .lp-sw i{left:calc(15.5px * var(--mui));background:#00222c}
+  .lp-sep{height:1px;background:rgba(255,255,255,.12);margin:calc(8px * var(--mui)) 0}
+  .lp-sub{color:#6f88a5;font-size:calc(10px * var(--mui));font-weight:700;letter-spacing:1.2px;
+    padding:calc(2px * var(--mui)) 0 calc(6px * var(--mui))}
+  .layerpop select{width:100%;background:rgba(255,255,255,.07);color:var(--fg);
+    border:1px solid rgba(255,255,255,.12);border-radius:calc(10px * var(--mui));
+    padding:calc(7px * var(--mui)) calc(9px * var(--mui));font-size:calc(13px * var(--mui))}
+
+  /* Windstrook onderaan */
+  .mapwind{position:absolute;left:10px;right:10px;bottom:10px;z-index:600;
+    border-radius:calc(18px * var(--mui));padding:calc(10px * var(--mui)) calc(15px * var(--mui));
+    display:none;align-items:center;gap:calc(12px * var(--mui));text-align:left}
+  .mapwind.show{display:flex}
+  .mapwind > svg.wi{width:calc(20px * var(--mui));height:calc(20px * var(--mui));fill:none;stroke:#b45cff;
+    stroke-width:1.8;stroke-linecap:round;flex:0 0 auto}
+  .mw-b{flex:1;min-width:0}
+  .mw-t,.mw-s{display:block}
+  .mw-t{color:var(--fg);font-size:calc(13.5px * var(--mui));font-weight:700;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mw-s{color:var(--muted);font-size:calc(11px * var(--mui));font-weight:600;padding-top:1px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mw-c{width:calc(16px * var(--mui));height:calc(16px * var(--mui));fill:none;stroke:var(--muted);
+    stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+
+  /* Kompasroos en zoom, rechtsonder boven de windstrook */
+  .maptools{position:absolute;right:10px;bottom:calc(10px + 78px * var(--mui));z-index:600;
+    display:flex;flex-direction:column;gap:calc(9px * var(--mui));align-items:flex-end}
+  body.geenwind .maptools{bottom:10px}
+  .mt-round{width:calc(50px * var(--mui));height:calc(50px * var(--mui));border-radius:50%;
+    display:flex;align-items:center;justify-content:center;padding:0}
+  .mt-round svg{width:calc(29px * var(--mui));height:calc(29px * var(--mui))}
+  .mt-zoom{width:calc(50px * var(--mui));border-radius:calc(16px * var(--mui));overflow:hidden}
+  .mt-zoom button{width:100%;height:calc(44px * var(--mui));background:none;border:0;padding:0;color:var(--fg);
+    display:flex;align-items:center;justify-content:center}
+  .mt-zoom button svg{width:calc(19px * var(--mui));height:calc(19px * var(--mui));fill:none;stroke:currentColor;
+    stroke-width:2;stroke-linecap:round}
+  .mt-scale{height:calc(24px * var(--mui));display:flex;align-items:center;justify-content:center;
+    color:var(--muted);font-size:calc(10px * var(--mui));font-weight:700;white-space:nowrap;
+    border-top:1px solid rgba(255,255,255,.10);border-bottom:1px solid rgba(255,255,255,.10)}
+
+  /* Onderbalk-iconen zijn nu SVG in plaats van emoji */
+  nav button .ni svg{width:calc(21px * var(--mui));height:calc(21px * var(--mui));fill:none;stroke:currentColor;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;display:block}
+  nav button.active .ni svg{stroke:var(--accent)}
+
+  /* Liggend en breed (tablet in een houder): de balk gaat rechtop naar links staan.
+     Onderin kost een balk hoogte die je op een breed scherm juist niet hebt, en de
+     linkerrand ligt dichter bij je hand dan de onderkant. */
+  @media (orientation:landscape) and (min-width:900px){
+    nav{position:fixed;left:0;top:0;bottom:0;z-index:700;width:calc(74px * var(--mui));
+      flex-direction:column;justify-content:flex-start;gap:calc(2px * var(--mui));
+      border-top:0;border-right:1px solid var(--line);
+      padding:calc(14px * var(--mui)) 0 var(--safe-b)}
+    nav button{flex:0 0 auto;padding:calc(11px * var(--mui)) 2px}
+    header,main{margin-left:calc(74px * var(--mui))}
+    .mapcard{left:10px;right:auto;width:min(370px, 42vw)}
+    .mapwind{left:10px;right:auto;width:min(420px, 46vw)}
+    /* de kaart is hier breed maar laag: de zuil mag bovenaan beginnen, want het
+       bovenpaneel staat links en zit hem niet meer in de weg */
+    .maprail,.layerpop{top:calc(var(--safe-t) + 10px)}
+    .layerpop{right:calc(66px * var(--mui))}
+    .maptools{bottom:10px}
+  }
+
   /* ---------- Nachtmodus (rood/gedimd, spaart nachtzicht) ---------- */
   body.night{--bg:#000;--bg2:#160303;--panel:#1a0505;--panel2:#210707;--line:#3a0d0d;
     --fg:#ffcac4;--muted:#c98a86;--accent:#ff6a4d;--accent2:#5c1c14;
@@ -352,23 +478,66 @@
     <section id="view-map" class="view">
       <div id="map"></div>
       <div class="simbadge">SIMULATIE — tik op de kaart</div>
-      <div class="predbar">
-        <button id="tgDots" class="predbtn on" title="Tijd-bolletjes aan/uit — langs je route, of langs je huidige koers als er geen route is">● Tijd</button>
-        <button id="tgRings" class="predbtn" title="Afstandsringen vanaf de boot">◎ Ringen</button>
-        <button id="tgRoute" class="predbtn" title="Routelijn tekenen">✏️ Route</button>
-        <button id="tgClear" class="predbtn" title="Route wissen">✕ Wis</button>
-      </div>
-      <div class="mapbottom">
-        <div id="predBadge" class="predbadge"></div>
-        <div id="windBadge" class="predbadge" style="display:none;cursor:pointer"></div>
-        <div class="layerpick">
-          <select id="layerSel"></select>
-          <span id="overlayBtns" class="ovbtns"></span>
+
+      <div class="mapcard ijs" id="mapTop">
+        <div class="mc-top">
+          <span class="mc-ch" id="mapChan">–</span><span class="mc-vhf">VHF</span>
+          <span class="mc-post" id="mapPost">Start GPS om te beginnen</span>
+          <span class="mc-dist" id="mapDist"></span>
+        </div>
+        <div class="mc-sep"></div>
+        <div class="mc-met">
+          <div><svg viewBox="0 0 24 24"><path d="M6 20 C6 13 18 15 18 8"/><circle cx="6" cy="20" r="2"/><circle cx="18" cy="6" r="2"/></svg><b id="mAfstand">–</b></div>
+          <div><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5 L12 12 L15 14"/></svg><b id="mAankomst">–</b></div>
+          <div><svg viewBox="0 0 24 24"><path d="M4 16 a8.5 8.5 0 1 1 16 0"/><path d="M12 16 L16 10"/></svg><b id="mSnelheid">–</b></div>
         </div>
       </div>
-      <div class="maptools">
-        <button id="btnLocate" title="Centreer op mij">🎯</button>
+
+      <div class="maprail ijs">
+        <button id="btnLayers" class="railbtn" title="Kaartlagen en ondergrond">
+          <svg viewBox="0 0 24 24"><path d="M12 3 L21 8 L12 13 L3 8 Z"/><path d="M3 12.5 L12 17.5 L21 12.5"/><path d="M3 17 L12 22 L21 17"/></svg></button>
+        <span class="railsep"></span>
+        <button id="tgRoute" class="railbtn" title="Routepunten toevoegen">
+          <svg viewBox="0 0 24 24"><path d="M4 20 L8 19 L19.5 7.5 a2.1 2.1 0 0 0 -3 -3 L5 16 Z"/></svg></button>
+        <button id="tgDots" class="railbtn" title="Tijd-bolletjes aan/uit">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5 L12 12 L15 14"/></svg></button>
       </div>
+
+      <div class="layerpop ijs" id="layerPop">
+        <div class="lp-kop">KAARTLAGEN</div>
+        <div id="overlayBtns"></div>
+        <div class="lp-sep"></div>
+        <div class="lp-kop">ROUTE</div>
+        <button id="tgRings" class="lp-row" title="Afstandsringen vanaf de boot">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.5"/></svg>
+          <span class="lbl">Afstandsringen</span><span class="lp-sw"><i></i></span></button>
+        <button id="tgClear" class="lp-row" title="Route wissen">
+          <svg viewBox="0 0 24 24"><path d="M6.5 6.5 L17.5 17.5 M17.5 6.5 L6.5 17.5"/></svg>
+          <span class="lbl">Route wissen</span></button>
+        <div class="lp-sep"></div>
+        <div class="lp-sub">ONDERGROND</div>
+        <select id="layerSel"></select>
+      </div>
+
+      <div class="maptools">
+        <button id="btnLocate" class="ijs mt-round" title="Centreer op mij">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1"/>
+            <path d="M12 3 L15.4 12 L12 10 Z" fill="#e23b3b"/><path d="M12 21 L8.6 12 L12 14 Z" fill="#c3d3e3"/>
+            <path d="M12 3 L8.6 12 L12 10 Z" fill="#ff7a6d"/><path d="M12 21 L15.4 12 L12 14 Z" fill="#8ba0b7"/></svg></button>
+        <div class="ijs mt-zoom">
+          <button id="btnZoomIn" title="Inzoomen"><svg viewBox="0 0 24 24"><path d="M12 5 L12 19 M5 12 L19 12"/></svg></button>
+          <div class="mt-scale" id="scaleTxt">–</div>
+          <button id="btnZoomOut" title="Uitzoomen"><svg viewBox="0 0 24 24"><path d="M5 12 L19 12"/></svg></button>
+        </div>
+      </div>
+
+      <button class="mapwind ijs" id="windBadge">
+        <svg class="wi" viewBox="0 0 24 24"><path d="M3 8 h10 a3 3 0 1 0 -3 -3"/><path d="M3 13 h13 a3 3 0 1 1 -3 3"/><path d="M3 18 h7"/></svg>
+        <span class="mw-b"><span class="mw-t" id="windTop">–</span><span class="mw-s" id="windSub"></span></span>
+        <svg class="mw-c" viewBox="0 0 24 24"><path d="M9 5 L16 12 L9 19"/></svg>
+      </button>
+      <div id="predBadge" style="display:none"></div>
     </section>
 
     <!-- VEILIGHEID -->
@@ -494,16 +663,16 @@
         <div class="set"><div><div class="lab">Over &amp; installeren</div><div class="sub">Uitleg, bronnen, installeren op je toestel.</div></div>
           <button class="filebtn" id="btnAbout" style="font-weight:800">Open</button></div>
       </div>
-      <div class="hint">Versie 4.10.0 · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
+      <div class="hint">Versie 5.0.0 · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
     </section>
   </main>
 
   <nav>
-    <button data-view="varen" class="active"><span class="ni">📻</span>Varen</button>
-    <button data-view="map"><span class="ni">🗺️</span>Kaart</button>
-    <button data-view="safe"><span class="ni">🚨</span>Veiligheid</button>
-    <button data-view="obj"><span class="ni">📋</span>Kanalen</button>
-    <button data-view="set"><span class="ni">⚙️</span>Instel</button>
+    <button data-view="varen" class="active"><span class="ni"><svg viewBox="0 0 24 24"><circle cx="12" cy="14" r="2.4"/><path d="M12 11.6 L12 5"/><path d="M8 7 a6 6 0 0 1 8 0"/><path d="M5.5 4 a10 10 0 0 1 13 0"/></svg></span>Varen</button>
+    <button data-view="map"><span class="ni"><svg viewBox="0 0 24 24"><path d="M3 6.5 L9 4 L15 6.5 L21 4 L21 17.5 L15 20 L9 17.5 L3 20 Z"/><path d="M9 4 L9 17.5"/><path d="M15 6.5 L15 20"/></svg></span>Kaart</button>
+    <button data-view="safe"><span class="ni"><svg viewBox="0 0 24 24"><path d="M12 4 L21 19.5 L3 19.5 Z"/><path d="M12 10 L12 14"/><path d="M12 16.6 L12 16.8"/></svg></span>Veiligheid</button>
+    <button data-view="obj"><span class="ni"><svg viewBox="0 0 24 24"><path d="M8 6 L20 6 M8 12 L20 12 M8 18 L20 18"/><path d="M4 6 L4.2 6 M4 12 L4.2 12 M4 18 L4.2 18"/></svg></span>Kanalen</button>
+    <button data-view="set"><span class="ni"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3 L12 5.5 M12 18.5 L12 21 M3 12 L5.5 12 M18.5 12 L21 12 M5.6 5.6 L7.4 7.4 M16.6 16.6 L18.4 18.4 M18.4 5.6 L16.6 7.4 M7.4 16.6 L5.6 18.4"/></svg></span>Instel</button>
   </nav>
 </div>
 
@@ -519,12 +688,12 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <!-- ?v= meeverhogen bij elke release: garandeert dat browsers de nieuwe JS pakken
      en niet een oude versie uit hun HTTP-cache blijven serveren. -->
-<script src="config.js?v=4.10.0"></script>
-<script src="data.js?v=4.10.0"></script>
-<script src="vhf-points.js?v=4.10.0"></script>
-<script src="fairway-depths.js?v=4.10.0"></script>
-<script src="obstacles.js?v=4.10.0"></script>
-<script src="stations.js?v=4.10.0"></script>
-<script src="app.js?v=4.10.0"></script>
+<script src="config.js?v=5.0.0"></script>
+<script src="data.js?v=5.0.0"></script>
+<script src="vhf-points.js?v=5.0.0"></script>
+<script src="fairway-depths.js?v=5.0.0"></script>
+<script src="obstacles.js?v=5.0.0"></script>
+<script src="stations.js?v=5.0.0"></script>
+<script src="app.js?v=5.0.0"></script>
 </body>
 </html>

@@ -382,6 +382,12 @@ function render(){
   $("bcPost").textContent = a.post;
   $("bcReason").textContent = a.reason;
   $("bcLabel").textContent = a.source==="point" ? "Zet marifoon op" : "Aanbevolen marifoon";
+  // hetzelfde advies, compact, in het kaartpaneel
+  const mc=$("mapChan"), mp=$("mapPost"), md=$("mapDist");
+  if(mc){ mc.textContent = a.channel!=null ? a.channel : "16";
+    mc.style.color = a.channel!=null ? "" : "var(--muted)"; }
+  if(mp) mp.textContent = a.post;
+  if(md) md.textContent = (a.source==="point" && a.dist!=null) ? fmtDist(a.dist) : "";
   if(a.source==="point"){ $("bcDist").style.display="inline-block";
     $("bcDist").textContent = a.dist<=150 ? "Ter hoogte van "+a.post : "Nog "+fmtDist(a.dist)+" tot "+a.post;
   } else $("bcDist").style.display="none";
@@ -567,7 +573,8 @@ function initMap(){
   readMui();
   // Zoomregelaar naar rechtsonder: linksboven botste hij op een telefoon met de vooruitblik-balk
   map=L.map("map",{zoomControl:false}).setView([52.75,5.35],9);
-  L.control.zoom({position:"bottomright"}).addTo(map);
+  // Geen L.control.zoom: de knoppen zitten in de matglazen kolom rechtsonder, samen
+  // met de kompasroos en de schaalbalk. Zo staat alle kaartbediening in één taal.
   fairwayDepthLayer=L.layerGroup().addTo(map);
   buildTileLayers();
   AREAS.forEach(a=>L.polygon(a.polygon,{color:a.color,weight:2,fillColor:a.color,fillOpacity:.10,interactive:false}).addTo(map));
@@ -591,10 +598,11 @@ function initMap(){
     if(routeMode){ route.push({lat:e.latlng.lat,lon:e.latlng.lng}); if(!pos && route.length===1) hintNoPos(); drawRouteMarkers(); drawPrediction(); }
     else if(S.sim){ simSet(e.latlng.lat,e.latlng.lng); }
   });
-  map.on("zoomend moveend",()=>{ drawPrediction(); drawNationalVhf(); drawFairwayDepths(); planAis(); drawWind(); });
+  map.on("zoomend moveend",()=>{ drawPrediction(); drawNationalVhf(); drawFairwayDepths(); planAis(); drawWind(); updateSchaal(); });
   // routepunten veranderen van vorm per zoomniveau, dus opnieuw opbouwen na zoomen
   let laatsteDetail=null;
   map.on("zoomend",()=>{ const d=wpDetail(); if(d!==laatsteDetail){ laatsteDetail=d; drawRouteMarkers(); } });
+  updateSchaal();
 }
 /* ---------------- Kaartlagen (config.js) ----------------
  * Lagen die een API-sleutel nodig hebben verschijnen pas zodra die sleutel er is —
@@ -627,7 +635,27 @@ function buildTileLayers(){
     sel.value=curBase;
   }
 }
-/* Elke overlay uit config.js krijgt automatisch een knop. Zo is er straks niets meer
+/* Lijniconen voor de lagenlijst. Emoji lazen als speelgoed en schaalden slecht; deze
+ * staan op hetzelfde 24-px raster met dezelfde lijndikte als de rest van de bediening. */
+const LAAG_ICOON={
+  seamark:'<circle cx="12" cy="5" r="2.2"/><path d="M12 7.2 L12 20"/><path d="M7 11 L17 11"/><path d="M4 14.5 a8 8 0 0 0 16 0"/>',
+  depth:'<path d="M3 9 q3 -2.4 6 0 t6 0 t6 0"/><path d="M3 14 q3 -2.4 6 0 t6 0 t6 0"/><path d="M3 19 q3 -2.4 6 0 t6 0 t6 0"/>',
+  vhf:'<circle cx="12" cy="14" r="2.4"/><path d="M12 11.6 L12 5"/><path d="M8 7 a6 6 0 0 1 8 0"/><path d="M9 20 L12 16.4 L15 20"/>',
+  ais:'<path d="M4 15 L20 15 L17.5 20 L6.5 20 Z"/><path d="M7 15 L7 9 L15 9 L15 15"/><path d="M11 9 L11 5"/>',
+  wind:'<path d="M3 8 h10 a3 3 0 1 0 -3 -3"/><path d="M3 13 h13 a3 3 0 1 1 -3 3"/><path d="M3 18 h7"/>'
+};
+/* Eén rij in de lagen-popover: icoon, naam, schakelaar. */
+function lagenRij(icoon, label, aan, titel, klik){
+  const b=document.createElement("button");
+  b.className="lp-row"+(aan?" on":"");
+  b.title=titel||label;
+  b.innerHTML='<svg viewBox="0 0 24 24">'+(LAAG_ICOON[icoon]||"")+'</svg>'
+    +'<span class="lbl">'+escapeHtml(label)+'</span><span class="lp-sw"><i></i></span>';
+  b.addEventListener("click",()=>klik(b));
+  return b;
+}
+
+/* Elke overlay uit config.js krijgt automatisch een rij. Zo is er straks niets meer
  * nodig dan een regel in TILE_OVERLAYS om er bijvoorbeeld AIS naast te zetten. */
 function buildOverlays(){
   Object.values(overlays).forEach(l=>{ if(map.hasLayer(l)) map.removeLayer(l); });
@@ -637,39 +665,42 @@ function buildOverlays(){
     overlays[def.id]=makeTileLayer(def);
     if(S.overlays && S.overlays[def.id]) overlays[def.id].addTo(map);
     if(!host) return;
-    const b=document.createElement("button");
-    b.className="seabtn"+((S.overlays&&S.overlays[def.id])?" on":"");
-    b.textContent=innerWidth<600 && def.shortLabel ? def.shortLabel : def.label; b.title=def.title||def.label;
-    b.addEventListener("click",()=>toggleOverlay(def.id,b));
-    host.appendChild(b);
+    host.appendChild(lagenRij(def.id, def.label.replace(/^[^\p{L}]+/u,"").trim() || def.label,
+      !!(S.overlays && S.overlays[def.id]), def.title, b=>toggleOverlay(def.id,b)));
   });
   if(host){
-    const b=document.createElement("button");
-    b.id="toggleVhf"; b.className="seabtn"+(S.vhfPoints?" on":"");
-    b.textContent=innerWidth<600?"📻 VHF":"📻 VHF Nederland";
-    b.title="Officiële RWS-meldpunten: bruggen en sluizen vanaf zoomniveau 10, VTS-punten altijd";
-    b.addEventListener("click",()=>{ S.vhfPoints=!S.vhfPoints; save(); b.classList.toggle("on",S.vhfPoints); drawNationalVhf(); });
-    host.appendChild(b);
+    const v=lagenRij("vhf","VHF-punten",S.vhfPoints,
+      "Officiële RWS-meldpunten: bruggen en sluizen vanaf zoomniveau 10, VTS-punten altijd",
+      b=>{ S.vhfPoints=!S.vhfPoints; save(); b.classList.toggle("on",S.vhfPoints); drawNationalVhf(); });
+    v.id="toggleVhf"; host.appendChild(v);
 
-    const a=document.createElement("button");
-    a.id="toggleAis"; a.className="seabtn"+(S.ais?" on":"");
-    a.textContent=innerWidth<600?"\u{1F6A2} AIS":"\u{1F6A2} Scheepvaart";
-    a.title="Schepen die AIS uitzenden, via EuRIS. Toont lang niet alles \u2014 zie de popup.";
-    a.addEventListener("click",()=>{ S.ais=!S.ais; save(); a.classList.toggle("on",S.ais);
-      if(S.ais) planAis(true); else { ais.schepen=[]; drawAis(); } });
-    host.appendChild(a);
+    const a=lagenRij("ais","Schepen",S.ais,
+      "Schepen die AIS uitzenden, via EuRIS. Toont lang niet alles \u2014 zie de popup.",
+      b=>{ S.ais=!S.ais; save(); b.classList.toggle("on",S.ais);
+        if(S.ais) planAis(true); else { ais.schepen=[]; drawAis(); } });
+    a.id="toggleAis"; host.appendChild(a);
 
-    const w=document.createElement("button");
-    w.id="toggleWind"; w.className="seabtn"+(S.wind?" on":"");
-    w.textContent="\u{1F32C} Wind";
-    w.title="Wind langs je route, op het moment dat je er volgens de planning bent";
-    w.addEventListener("click",()=>{ S.wind=!S.wind; save(); w.classList.toggle("on",S.wind);
-      if(S.wind){ if(route.length) haalWind(); else showToast("\u{1F32C}","Nog geen route",
-        "Teken eerst een route met de Route-knop; dan zet ik de wind erlangs.",{}); drawWind(); }
-      else drawWind(); });
-    host.appendChild(w);
+    const w=lagenRij("wind","Wind",S.wind,
+      "Wind langs je route, op het moment dat je er volgens de planning bent",
+      b=>{ S.wind=!S.wind; save(); b.classList.toggle("on",S.wind);
+        if(S.wind){ if(route.length) haalWind(); else showToast("\u{1F32C}","Nog geen route",
+          "Teken eerst een route met de Route-knop; dan zet ik de wind erlangs.",{}); drawWind(); }
+        else drawWind(); });
+    w.id="toggleWind"; host.appendChild(w);
   }
 }
+/* Schaalbalk: hoeveel meter is honderd pixels op dit zoomniveau? Afgerond op een
+ * herkenbaar getal, zoals op een zeekaart. */
+function updateSchaal(){
+  const el=$("scaleTxt"); if(!el||!map) return;
+  const c=map.getCenter();
+  const p1=map.containerPointToLatLng([0,0]), p2=map.containerPointToLatLng([100,0]);
+  const m=haversine(p1.lat,p1.lng,p2.lat,p2.lng);
+  const net=[10,20,50,100,200,500,1000,2000,5000,10000,20000,50000];
+  let k=net[0]; for(const n of net) if(n<=m) k=n;
+  el.textContent = k>=1000 ? (k/1000)+" km" : k+" m";
+}
+
 function toggleOverlay(id,btn){
   const l=overlays[id]; if(!l) return;
   S.overlays=Object.assign({},S.overlays);
@@ -1206,19 +1237,22 @@ function windPopup(t){
 }
 
 function updateWindBadge(){
-  const el=$("windBadge"); if(!el) return;
-  if(!S.wind || !route.length){ el.style.display="none"; return; }
-  el.style.display="block";
-  if(wind.bezig){ el.textContent="Wind ophalen…"; return; }
-  if(wind.fout){ el.textContent="Wind niet beschikbaar: "+wind.fout; return; }
-  const tr=windTrajecten().filter(t=>t.w);
-  if(!tr.length){ el.textContent="Geen windverwachting voor deze tijd"; return; }
-  const kn=tr.map(t=>t.w.kn);
-  const tegen=tr.filter(t=>t.hoek&&t.hoek.kruisen).length;
-  const vertrek = wind.vertrekU===0 ? "nu" : windTijd(windVertrek());
-  el.textContent = "\u{1F32C} Vertrek "+vertrek+" · "+fmtKn(Math.min(...kn))+"–"+fmtKn(Math.max(...kn))+" kn"
-    + (tegen ? " · ⚠ "+tegen+"× pal tegen" : "")
-    + " · tik voor details";
+  const el=$("windBadge"), t=$("windTop"), sub=$("windSub");
+  if(!el||!t||!sub) return;
+  const toon=(aan)=>{ el.classList.toggle("show",aan); document.body.classList.toggle("geenwind",!aan); };
+  if(!S.wind || !route.length){ toon(false); return; }
+  toon(true);
+  if(wind.bezig){ t.textContent="Wind ophalen…"; sub.textContent=""; return; }
+  if(wind.fout){ t.textContent="Wind niet beschikbaar"; sub.textContent=wind.fout; return; }
+  const tr=windTrajecten().filter(x=>x.w);
+  if(!tr.length){ t.textContent="Geen verwachting voor deze tijd"; sub.textContent="Schuif de vertrektijd terug"; return; }
+  const kn=tr.map(x=>x.w.kn);
+  const tegen=tr.filter(x=>x.hoek&&x.hoek.kruisen).length;
+  const richtingen=[...new Set(tr.map(x=>compass(x.w.uit)))];
+  t.textContent = fmtKn(Math.min(...kn))+"–"+fmtKn(Math.max(...kn))+" kn  "+richtingen.slice(0,2).join("–");
+  const vertrek = wind.vertrekU===0 ? "vertrek nu" : "vertrek "+windTijd(windVertrek());
+  sub.textContent = vertrek + (tegen ? " · "+tegen+"× pal tegen" : "");
+  sub.style.color = tegen ? "#e0a200" : "";
 }
 
 /* Het venster met de vertrektijdschuif. Daar zit de eigenlijke waarde van zeven dagen
@@ -1590,21 +1624,31 @@ function drawPrediction(){
     }
   } else updatePredBadge(P, null);
 }
+/* De drie cijfers in het bovenpaneel: afstand, aankomsttijd, snelheid. Aankomsttijd
+ * in plaats van reisduur, want dat is wat je wilt weten als je een brug wilt halen -
+ * de duur staat er in de titel bij. */
 function updatePredBadge(P, rt){
-  const el=$("predBadge"); if(!el) return;
-  if(!P){ el.style.display="none"; el.textContent=""; return; }
-  el.style.display="block";
-  const spd = P.usingPlan ? (fmtKn(S.planSpeed)+" kn (plan)") : (fmtKn(P.v*1.94384)+" kn (live)");
-  // staan de bolletjes uit, dan zegt "elke 10m" niets meer
-  const ivl = S.predDots ? (" · elke "+fmtMin(P.interval)) : "";
+  const a=$("mAfstand"), t=$("mAankomst"), v=$("mSnelheid"), kaart=$("mapTop");
+  if(!a||!t||!v) return;
+  const spd = P ? (P.usingPlan ? fmtKn(S.planSpeed) : fmtKn(P.v*1.94384)) : null;
+  v.textContent = spd!=null ? spd+" kn" : "–";
+  if(v.parentElement) v.parentElement.title = P && P.usingPlan
+    ? "Planningssnelheid — je ligt stil of er is nog geen GPS-snelheid" : "Gemeten snelheid over de grond";
   if(rt){
-    const stops = rt.stops ? " · incl. "+rt.stops+"× "+(rt.stops===1?"sluis/brug":"sluizen/bruggen")+" +"+fmtDur(rt.wait) : "";
-    const blok  = rt.blocked ? " · ⛔ "+rt.blocked+"× te laag" : "";
-    const onz   = rt.onzeker ? " · ⚠ "+rt.onzeker+"× hoogte onzeker" : "";
-    el.textContent = "Route "+fmtDist(rt.len)+" · "+fmtDur(rt.sail+rt.wait)+" @ "+spd+stops+blok+onz+ivl;
+    a.textContent = fmtDist(rt.len);
+    const min = rt.sail + rt.wait;
+    const aan = new Date(Date.now() + min*60000);
+    t.textContent = String(aan.getHours()).padStart(2,"0")+":"+String(aan.getMinutes()).padStart(2,"0");
+    const stops = rt.stops ? ", incl. "+rt.stops+"× sluis/brug (+"+fmtDur(rt.wait)+")" : "";
+    if(t.parentElement) t.parentElement.title = "Aankomst over "+fmtDur(min)+stops;
+    if(a.parentElement) a.parentElement.title = "Lengte van de route";
+    if(kaart) kaart.classList.add("metroute");
+  } else {
+    a.textContent="–"; t.textContent="–";
+    if(t.parentElement) t.parentElement.title = "Aankomsttijd verschijnt zodra je een route tekent";
+    if(a.parentElement) a.parentElement.title = "Routelengte verschijnt zodra je een route tekent";
+    if(kaart) kaart.classList.remove("metroute");
   }
-  else if(!S.predDots && !S.predRings){ el.style.display="none"; el.textContent=""; }
-  else el.textContent = "elke "+fmtMin(P.interval)+" · tot "+fmtMin(P.interval*P.count)+(P.usingPlan?(" · plan "+fmtKn(S.planSpeed)+" kn"):"");
 }
 /* ---- Routepunten bewerken ----
  * Slepen om te verplaatsen, tikken voor een menuutje met verwijderen of een punt
@@ -2022,6 +2066,18 @@ window.addEventListener("DOMContentLoaded",()=>{
   });
   $("btnFs").addEventListener("click",toggleFullscreen);
   $("btnLocate").addEventListener("click",()=>{ if(pos&&map) map.setView([pos.lat,pos.lon],13); else startGPS(); });
+  // Lagen-popover: open aan de knop, dicht bij een tik op de kaart of op de knop zelf.
+  const lagenKnop=$("btnLayers"), pop=$("layerPop");
+  if(lagenKnop && pop){
+    lagenKnop.addEventListener("click",e=>{ e.stopPropagation();
+      const aan=!pop.classList.contains("show");
+      pop.classList.toggle("show",aan); lagenKnop.classList.toggle("on",aan); });
+    pop.addEventListener("click",e=>e.stopPropagation());
+    document.addEventListener("click",()=>{ pop.classList.remove("show"); lagenKnop.classList.remove("on"); });
+  }
+  const zi=$("btnZoomIn"), zo=$("btnZoomOut");
+  if(zi) zi.addEventListener("click",()=>{ if(map) map.zoomIn(); });
+  if(zo) zo.addEventListener("click",()=>{ if(map) map.zoomOut(); });
   // Vooruitblik-knoppen
   $("tgDots").classList.toggle("on",S.predDots); $("tgRings").classList.toggle("on",S.predRings);
   $("tgDots").addEventListener("click",()=>{ S.predDots=!S.predDots; save(); $("tgDots").classList.toggle("on",S.predDots); drawPrediction(); if(S.predDots&&!pos) hintNoPos(); });
