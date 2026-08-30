@@ -43,6 +43,36 @@ Markermeer en de Waddenzee — op basis van je **positie én vaarrichting**. Wer
 > niet gelijk is aan LAT. Bruikbaar om te zien wáár het ondiep wordt, **niet om op te navigeren**.
 > Het is sinds v4.8 de achtervang: waar RWS een loding heeft, wint die.
 
+## Nieuw in v4.10 — wind langs je route, voor zeilers
+
+- 🌬 De kaartknop **Wind** zet de verwachting langs je routelijn: een pijl die met de wind
+  mee wijst, met snelheid en windrichting erbij.
+- ⏱ **Op het moment dat je er bent, niet op nu.** Per meetpunt pakt de app het voorspelde
+  uur dat hoort bij je ETA daar — inclusief de wachttijd voor sluizen en bruggen die de
+  routeplanner al meerekent.
+- ⛵ **De hoek tussen wind en koers**, want dat is het getal waar een zeiler op stuurt:
+  aan de wind, halve wind, ruime wind of voor de wind. Staat de wind pal op de neus, dan
+  zegt de app dat — daar moet je kruisen of de motor aan, en dat kost meer tijd dan de
+  routeplanner aangeeft.
+- 📅 **Vertrektijdschuif over 7 dagen.** Daar zit de waarde van de vooruitblik: niet "hoe
+  waait het deze week" maar *welke dag laat deze route zich zeilen*.
+- 💨 Waarschuwing bij vlagen boven de 25 knopen.
+
+Bron: [Open-Meteo](https://open-meteo.com) (CC-BY 4.0), met **KNMI Harmonie AROME
+Nederland** op 2 km zolang dat model reikt — ongeveer 2,5 dag — en daarna ECMWF IFS.
+Onder de tabel staat altijd welk model je ziet. Er is geen sleutel nodig en geen proxy:
+Open-Meteo stuurt CORS-headers, dus de browser mag er rechtstreeks bij.
+
+> ⚠️ Een verwachting is geen meting, en geldt voor 10 m boven open water. In de luwte van
+> een dijk waait het anders. Gebruik de zevendaagse blik om een dag te kiezen, niet om op
+> te varen.
+
+> **Bij een commerciële uitrol:** de gratis tier van Open-Meteo is uitsluitend voor
+> niet-commercieel gebruik. Neem dan een betaald plan, of zet `haalWindData()` om naar
+> `api.met.no` (MET Norway) — dat is gratis inclusief commercieel gebruik, stuurt ook
+> CORS-headers en reikt tien dagen vooruit, maar levert één punt per verzoek en geen
+> windvlagen in het compacte product.
+
 ## Nieuw in v4.9 — scheepvaart op de kaart (AIS via EuRIS)
 
 - 🚢 De kaartknop **Scheepvaart** zet schepen op de kaart die AIS uitzenden. Varende schepen
@@ -94,6 +124,7 @@ op álle jaargangen); **sinds 2026-08-26 werkt hij weer**, en de app gebruikt he
 | **✕ Wis** | Route weg. |
 | **⚓ Zeekaart** | Zeekaart-symbolen (boeien, tonnen, dieptelijnen) over de kaart — werkt ook over satelliet. |
 | **🌊 Diepte** | Landelijke officiële RWS-vaarwegdieptes en maximale diepgang; vanaf zoom 10 ook bodemniveau-labels. EMODnet-bodemlijnen vormen de indicatieve achtergrond. |
+| **🌬 Wind** | Windverwachting langs je route, op het moment dat je er volgens de planning bent, met de hoek ten opzichte van je koers. Tik de balk aan voor de tabel en de vertrektijdschuif. |
 | **🚢 Scheepvaart** | Schepen die AIS uitzenden, via EuRIS. Tik er een aan voor afmetingen, koers, snelheid en — als de bron hem geeft — de naam. Toont lang niet alles; zie de waarschuwing hierboven. |
 
 ## Nieuw in v3.0 — routepunten bewerken

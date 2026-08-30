@@ -13,6 +13,7 @@ const DEFAULTS = {
   airDraft:null,                                  // hoogte boven water (m); null = niet ingesteld → elke brug moet open
   baseLayer:null, overlays:{depth:true}, mapKeys:{}, vhfPoints:true, // kaartkeuze, overlays, landelijke VHF-punten
   chartDatum:null,                                // reductievlak van de LAT-dieptedata t.o.v. NAP (m); null = geen getijcorrectie
+  wind:false,                                     // wind langs de route (Open-Meteo)
   ais:false, aisApi:"",                           // AIS-scheepvaart via de EuRIS-proxy (zie tools/proxy/)
   peilNAP:-0.20                                   // aangenomen waterpeil t.o.v. NAP (m) voor de RWS-bodemhoogte; wordt overruled door een gemeten stand
 };
@@ -547,7 +548,7 @@ function toggleAnchor(){
 }
 
 /* ---------------- Kaart ---------------- */
-let map=null, boat=null, mapCentered=false, overlays={}, baseLayers={}, curBase="osm", predLayer=null, nationalVhfLayer=null, fairwayDepthLayer=null, aisLayer=null;
+let map=null, boat=null, mapCentered=false, overlays={}, baseLayers={}, curBase="osm", predLayer=null, nationalVhfLayer=null, fairwayDepthLayer=null, aisLayer=null, windLayer=null;
 let route=[], routeMode=false, lastBlockedKey=null, pointMarkers=[], routeLayer=null;
 /* Alles op de kaart (pins, bolletjes, labels) schaalt mee met --mui, zodat de
  * leesafstand-instelling niet alleen het Varen-dashboard maar ook de kaart raakt. */
@@ -577,6 +578,7 @@ function initMap(){
   });
   nationalVhfLayer=L.layerGroup().addTo(map);
   aisLayer=L.layerGroup().addTo(map);
+  windLayer=L.layerGroup().addTo(map);
   drawNationalVhf();
   drawFairwayDepths();
   KNRM.forEach(k=>L.marker([k.lat,k.lon],{icon:knrmIcon()}).bindPopup("<b>"+k.name+"</b><br>🚨 Alarm via Kustwacht / kanaal 16").addTo(map));
@@ -656,6 +658,16 @@ function buildOverlays(){
     a.addEventListener("click",()=>{ S.ais=!S.ais; save(); a.classList.toggle("on",S.ais);
       if(S.ais) planAis(true); else { ais.schepen=[]; drawAis(); } });
     host.appendChild(a);
+
+    const w=document.createElement("button");
+    w.id="toggleWind"; w.className="seabtn"+(S.wind?" on":"");
+    w.textContent="\u{1F32C} Wind";
+    w.title="Wind langs je route, op het moment dat je er volgens de planning bent";
+    w.addEventListener("click",()=>{ S.wind=!S.wind; save(); w.classList.toggle("on",S.wind);
+      if(S.wind){ if(route.length) haalWind(); else showToast("\u{1F32C}","Nog geen route",
+        "Teken eerst een route met de Route-knop; dan zet ik de wind erlangs.",{}); drawWind(); }
+      else drawWind(); });
+    host.appendChild(w);
   }
 }
 function toggleOverlay(id,btn){
@@ -835,6 +847,288 @@ function drawAis(){
     L.marker([s.lat,s.lon],{icon:aisIcon(s),zIndexOffset:60})
       .bindPopup(aisPopup(s)).addTo(aisLayer);
   }
+}
+
+/* ---------------- Wind langs de route (Open-Meteo) ----------------
+ * Bron: Open-Meteo, model KNMI Harmonie AROME Nederland (2 km) waar beschikbaar, daarna
+ * ECMWF IFS. Gemeten: Harmonie dekt ~67 uur vooruit, ECMWF de volle 7 dagen, en ze
+ * verschillen echt (16,7 tegen 13,7 kn op hetzelfde uur). Welk model een waarde leverde
+ * gaat daarom mee naar het scherm - zelfde regel als het meetjaar bij de loding.
+ *
+ * WAAROM DIT ANDERS IS DAN "het weer op de kaart": een zeiler wil niet weten hoe het NU
+ * waait waar hij STRAKS is, maar hoe het waait op het moment dat hij er is. De app weet
+ * dat al: pathLength, predParams().v en waitBefore() leveren samen de ETA per punt. En
+ * dan is het getal dat telt niet de windrichting maar de hoek tussen wind en koers -
+ * dat bepaalt of een traject te zeilen is of dat je moet kruisen.
+ *
+ * Open-Meteo stuurt access-control-allow-origin: *, dus dit gaat rechtstreeks vanuit de
+ * browser; geen proxy nodig. Let op: hun gratis tier is NIET voor commercieel gebruik.
+ * Ga je live, dan koop je een plan of zet je haalWindData() om naar api.met.no, dat wel
+ * gratis-commercieel is. Daarom staat het ophalen in een eigen functie.        */
+const WIND_API = "https://api.open-meteo.com/v1/forecast";
+const WIND_MODELLEN = [
+  { id:"knmi_harmonie_arome_netherlands", naam:"KNMI Harmonie 2 km" },
+  { id:"ecmwf_ifs025",                    naam:"ECMWF IFS" }
+];
+const WIND_MAX_PUNTEN = 12;
+const WIND_STAP_M = 8000;      // extra meetpunt om de zoveel meter, naast elk routepunt
+
+let wind={ punten:[], data:null, sleutel:null, bezig:false, fout:null, vertrekU:0 };
+
+/* Meetpunten langs de route: elk routepunt, plus tussenpunten op lange trajecten. */
+function windPunten(path){
+  if(!path || path.length<2) return [];
+  const uit=[{lat:path[0][0], lon:path[0][1], afst:0}];
+  let acc=0;
+  for(let i=0;i<path.length-1;i++){
+    const la1=path[i][0],lo1=path[i][1],la2=path[i+1][0],lo2=path[i+1][1];
+    const seg=haversine(la1,lo1,la2,lo2)||1e-9;
+    let d=WIND_STAP_M;
+    while(d<seg){
+      const f=d/seg;
+      uit.push({lat:la1+(la2-la1)*f, lon:lo1+(lo2-lo1)*f, afst:acc+d});
+      d+=WIND_STAP_M;
+    }
+    acc+=seg;
+    uit.push({lat:la2, lon:lo2, afst:acc});
+  }
+  // gelijkmatig uitdunnen tot het maximum; begin- en eindpunt blijven altijd staan
+  if(uit.length>WIND_MAX_PUNTEN){
+    const stap=(uit.length-1)/(WIND_MAX_PUNTEN-1), dun=[];
+    for(let i=0;i<WIND_MAX_PUNTEN;i++) dun.push(uit[Math.round(i*stap)]);
+    return dun;
+  }
+  return uit;
+}
+
+async function haalWindData(punten){
+  const u = WIND_API
+    + "?latitude=" + punten.map(p=>p.lat.toFixed(4)).join(",")
+    + "&longitude=" + punten.map(p=>p.lon.toFixed(4)).join(",")
+    + "&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m"
+    + "&models=" + WIND_MODELLEN.map(m=>m.id).join(",")
+    + "&wind_speed_unit=kn&timeformat=unixtime&forecast_days=7";
+  const r=await fetch(u);
+  if(!r.ok) throw new Error("Open-Meteo gaf status "+r.status);
+  const d=await r.json();
+  return Array.isArray(d) ? d : [d];
+}
+
+async function haalWind(){
+  const path=livePath();
+  const punten=windPunten(path);
+  if(!punten.length){ wind.data=null; wind.punten=[]; drawWind(); return; }
+  // sleutel op de meetpunten: alleen opnieuw ophalen als de route echt verandert
+  const sleutel=punten.map(p=>p.lat.toFixed(3)+","+p.lon.toFixed(3)).join(";");
+  if(wind.data && wind.sleutel===sleutel) { drawWind(); return; }
+  if(wind.bezig) return;
+  wind.bezig=true; wind.fout=null;
+  try{
+    wind.data=await haalWindData(punten);
+    wind.punten=punten; wind.sleutel=sleutel;
+  }catch(e){ wind.fout=String((e&&e.message)||e); wind.data=null; }
+  finally{ wind.bezig=false; drawWind(); }
+}
+
+/* Wind op meetpunt i, op tijdstip t (ms). Harmonie wint zolang die reikt. */
+function windOp(i, t){
+  if(!wind.data || !wind.data[i]) return null;
+  const h=wind.data[i].hourly, tijden=h.time;
+  if(!tijden || !tijden.length) return null;
+  const doel=Math.round(t/1000);
+  if(doel < tijden[0]-3600 || doel > tijden[tijden.length-1]+3600) return null;
+  // dichtstbijzijnde uur
+  let k=0, best=Infinity;
+  for(let j=0;j<tijden.length;j++){ const d=Math.abs(tijden[j]-doel); if(d<best){best=d;k=j;} }
+  for(const m of WIND_MODELLEN){
+    const kn=h["wind_speed_10m_"+m.id], ri=h["wind_direction_10m_"+m.id], vl=h["wind_gusts_10m_"+m.id];
+    if(kn && kn[k]!=null && ri && ri[k]!=null)
+      return { kn:kn[k], uit:ri[k], vlaag:(vl&&vl[k]!=null)?vl[k]:null, model:m.naam, uur:tijden[k]*1000 };
+  }
+  return null;
+}
+
+/* De hoek tussen de wind en je koers. 0 graden = pal op de neus, 180 = pal van achteren.
+ * Dit is het getal waar een zeiler op stuurt; de absolute windrichting zegt op zichzelf
+ * niets over of een traject te zeilen is. */
+const WIND_HOEKEN=[
+  { tot:35,  naam:"pal op de neus", kort:"tegen", kleur:"#ff5d5d", kruisen:true },
+  { tot:60,  naam:"aan de wind",    kort:"aan",   kleur:"#ffce6b" },
+  { tot:110, naam:"halve wind",     kort:"half",  kleur:"#7fe0a0" },
+  { tot:150, naam:"ruime wind",     kort:"ruim",  kleur:"#7fe0a0" },
+  { tot:181, naam:"voor de wind",   kort:"voor",  kleur:"#8fdcff" }
+];
+function windHoek(koers, uit){
+  const h=angleDiff(koers, uit);
+  for(const k of WIND_HOEKEN) if(h<k.tot) return Object.assign({hoek:h}, k);
+  return Object.assign({hoek:h}, WIND_HOEKEN[WIND_HOEKEN.length-1]);
+}
+
+/* Vertrektijd: nu, of zoveel uur later als de schuif in het venster aangeeft. */
+function windVertrek(){ return Date.now() + wind.vertrekU*3600*1000; }
+
+/* Per meetpunt: wanneer ben je daar, welke koers vaar je daar, en wat doet de wind dan. */
+function windTrajecten(){
+  if(!wind.data || !wind.punten.length) return [];
+  const path=livePath();
+  if(path.length<2) return [];
+  const P=predParams(); if(!P) return [];
+  const obst = S.lockDelay>0 ? routeObstacles(path) : [];
+  const vertrek=windVertrek();
+  const uit=[];
+  for(let i=0;i<wind.punten.length;i++){
+    const pt=wind.punten[i];
+    const wachtMin=waitBefore(pt.afst, obst);
+    const t=vertrek + (pt.afst/P.v)*1000 + wachtMin*60000;
+    const w=windOp(i,t);
+    // koers: richting naar het volgende meetpunt, of vanaf het vorige op het eindpunt
+    let koers=null;
+    if(i<wind.punten.length-1) koers=bearing(pt.lat,pt.lon,wind.punten[i+1].lat,wind.punten[i+1].lon);
+    else if(i>0) koers=bearing(wind.punten[i-1].lat,wind.punten[i-1].lon,pt.lat,pt.lon);
+    uit.push({ i:i, pt:pt, tijd:t, koers:koers, w:w,
+      hoek: (w&&koers!=null) ? windHoek(koers,w.uit) : null });
+  }
+  return uit;
+}
+
+function windPijlIcon(w, hoek){
+  const g=sc(30);
+  const kleur = hoek ? hoek.kleur : "#bfeeff";
+  // De pijl wijst mee met de wind (waarheen het waait), zoals op elke weerkaart.
+  const draai = (w.uit+180)%360;
+  const dik = w.kn>=22 ? 2.6 : 1.8;
+  return L.divIcon({className:"",iconSize:[g,g],iconAnchor:[g/2,g/2],
+    html:'<div style="width:'+g+'px;height:'+g+'px;display:flex;align-items:center;justify-content:center">'
+      +'<svg width="'+g+'" height="'+g+'" viewBox="0 0 24 24" style="transform:rotate('+draai+'deg)">'
+      +'<path d="M12 2 L12 20 M12 20 L8 15 M12 20 L16 15" stroke="'+kleur+'" stroke-width="'+dik+'" '
+      +'fill="none" stroke-linecap="round" stroke-linejoin="round" '
+      +'style="filter:drop-shadow(0 0 2px #000) drop-shadow(0 0 2px #000)"/></svg></div>'});
+}
+
+function drawWind(){
+  if(!map||!windLayer) return;
+  windLayer.clearLayers();
+  updateWindBadge();
+  if(!S.wind || !wind.data) return;
+  for(const t of windTrajecten()){
+    if(!t.w) continue;
+    L.marker([t.pt.lat,t.pt.lon],{icon:windPijlIcon(t.w,t.hoek),zIndexOffset:80,interactive:true})
+      .bindPopup(windPopup(t)).addTo(windLayer);
+    mapLabelWind(t.pt.lat, t.pt.lon, fmtKn(t.w.kn)+" kn "+compass(t.w.uit), t.hoek?t.hoek.kleur:"#bfeeff");
+  }
+}
+function mapLabelWind(lat,lon,text,kleur){
+  const w=sc(110);
+  L.marker([lat,lon],{interactive:false,icon:L.divIcon({className:"",iconSize:[w,sc(14)],iconAnchor:[w/2,sc(-8)],
+    html:'<div style="width:'+w+'px;text-align:center;color:'+kleur+';font-weight:800;font-size:'+sc(11)+'px;'
+      +'text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000">'+escapeHtml(text)+'</div>'})}).addTo(windLayer);
+}
+
+function windTijd(t){
+  const d=new Date(t), nu=new Date();
+  const zelfdeDag = d.toDateString()===nu.toDateString();
+  const uur = String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  if(zelfdeDag) return uur;
+  return ["zo","ma","di","wo","do","vr","za"][d.getDay()]+" "+uur;
+}
+
+function windPopup(t){
+  const w=t.w;
+  const vlaag = w.vlaag!=null ? "<br>\u{1F4A8} vlagen tot "+fmtKn(w.vlaag)+" kn" : "";
+  const hoek = t.hoek
+    ? "<br>⛵ <b>"+t.hoek.naam+"</b> ("+Math.round(t.hoek.hoek)+"° van je koers "+Math.round(t.koers)+"°)"
+      + (t.hoek.kruisen?"<br>⚠️ Kruisen of motoren":"")
+    : "";
+  return "<b>"+windTijd(t.tijd)+"</b> · "+fmtDist(t.pt.afst)+" op de route"
+    + "<br>\u{1F32C} "+fmtKn(w.kn)+" kn uit "+compass(w.uit)+" ("+Math.round(w.uit)+"°)"
+    + vlaag + hoek
+    + "<br><small>"+escapeHtml(w.model)+" via Open-Meteo · verwachting, geen meting.</small>";
+}
+
+function updateWindBadge(){
+  const el=$("windBadge"); if(!el) return;
+  if(!S.wind || !route.length){ el.style.display="none"; return; }
+  el.style.display="block";
+  if(wind.bezig){ el.textContent="Wind ophalen…"; return; }
+  if(wind.fout){ el.textContent="Wind niet beschikbaar: "+wind.fout; return; }
+  const tr=windTrajecten().filter(t=>t.w);
+  if(!tr.length){ el.textContent="Geen windverwachting voor deze tijd"; return; }
+  const kn=tr.map(t=>t.w.kn);
+  const tegen=tr.filter(t=>t.hoek&&t.hoek.kruisen).length;
+  const vertrek = wind.vertrekU===0 ? "nu" : windTijd(windVertrek());
+  el.textContent = "\u{1F32C} Vertrek "+vertrek+" · "+fmtKn(Math.min(...kn))+"–"+fmtKn(Math.max(...kn))+" kn"
+    + (tegen ? " · ⚠ "+tegen+"× pal tegen" : "")
+    + " · tik voor details";
+}
+
+/* Het venster met de vertrektijdschuif. Daar zit de eigenlijke waarde van zeven dagen
+ * vooruit: niet "hoe waait het deze week" maar "welke dag is deze route te zeilen". */
+function openWindPaneel(){
+  openModal(windPaneelHtml());
+  bindWindPaneel();
+}
+function windPaneelHtml(){
+  return '<h3>\u{1F32C} Wind op je route</h3>'
+    + '<p style="color:var(--muted);font-size:13px">Per meetpunt de verwachting voor het moment dat je er '
+    + '<b>volgens de planning bent</b>, niet voor nu. Schuif de vertrektijd om te zien welke dag deze route zich laat zeilen.</p>'
+    + '<div style="display:flex;align-items:center;gap:10px;margin:10px 0 4px">'
+    + '<span style="font-size:13px;color:var(--muted)">Vertrek</span>'
+    + '<input type="range" id="windVertrekRange" min="0" max="144" step="1" value="'+wind.vertrekU+'" style="flex:1">'
+    + '<b id="windVertrekVal" style="min-width:86px;text-align:right">'+escapeHtml(wind.vertrekU?windTijd(windVertrek()):"nu")+'</b></div>'
+    + '<div id="windPaneelBody">'+windPaneelBody()+'</div>'
+    + '<button class="ok" onclick="closeModal()">Sluiten</button>';
+}
+
+/* Alles wat met de vertrektijd meebeweegt staat hier bij elkaar - inclusief de modelregel.
+ * Ververste eerder alleen de tabel, waardoor er "KNMI Harmonie" onder een tabel bleef
+ * staan die allang uit ECMWF kwam. Provenance die niet meeschuift is erger dan geen
+ * provenance, want je gelooft hem. */
+function windPaneelBody(){
+  const tr=windTrajecten();
+  const metWind=tr.filter(t=>t.w);
+  if(!metWind.length){
+    return '<p style="color:#ffce6b">Geen verwachting voor dit tijdstip. De voorspelling reikt zeven dagen '
+         + 'vooruit; schuif de vertrektijd terug.</p>';
+  }
+  const rijen = metWind.map(t=>{
+    const h=t.hoek;
+    const vl = (t.w.vlaag!=null && t.w.vlaag>t.w.kn+4)
+      ? ' <span style="color:#ffce6b">↑'+fmtKn(t.w.vlaag)+'</span>' : '';
+    return '<tr>'
+      + '<td style="padding:5px 8px;white-space:nowrap">'+escapeHtml(windTijd(t.tijd))+'</td>'
+      + '<td style="padding:5px 8px;color:var(--muted);white-space:nowrap">'+escapeHtml(fmtDist(t.pt.afst))+'</td>'
+      + '<td style="padding:5px 8px;white-space:nowrap"><b>'+fmtKn(t.w.kn)+'</b> kn '+escapeHtml(compass(t.w.uit))+vl+'</td>'
+      + '<td style="padding:5px 8px;color:'+(h?h.kleur:"#bfeeff")+';font-weight:700;white-space:nowrap">'
+      + escapeHtml(h?h.naam:"–")+'</td></tr>';
+  }).join("");
+  const modellen=[...new Set(metWind.map(t=>t.w.model))];
+  const tegen=tr.filter(t=>t.hoek&&t.hoek.kruisen).length;
+  const waarschuwing = tegen
+    ? '<p style="color:#ff9d9d;margin:8px 0"><b>⚠️ '+tegen+' van de '+metWind.length+' meetpunten hebben de wind '
+      + 'pal op de neus.</b> Daar moet je kruisen of de motor aan — reken op meer tijd dan de routeplanner aangeeft.</p>'
+    : '';
+  const hard = metWind.filter(t=>t.w.vlaag!=null && t.w.vlaag>=25).length;
+  const vlagen = hard
+    ? '<p style="color:#ffce6b;margin:8px 0"><b>\u{1F4A8} Vlagen tot boven de 25 knopen</b> op '+hard+' meetpunt'
+      + (hard>1?'en':'')+'.</p>'
+    : '';
+  return waarschuwing + vlagen
+    + '<div style="max-height:42vh;overflow:auto;margin-top:8px">'
+    + '<table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>'+rijen+'</tbody></table></div>'
+    + '<p style="color:var(--muted);font-size:12px;margin-top:10px">Bron: Open-Meteo — '
+    + escapeHtml(modellen.join(" en ")) + '. Het KNMI-model van 2 km reikt ongeveer 2,5 dag vooruit; daarna komt '
+    + 'de verwachting uit een globaal model dat grover is. <b>Dit is een verwachting, geen meting</b>, en geldt voor '
+    + '10 m boven open water — in de luwte van een dijk of tussen de kribben waait het anders.</p>';
+}
+
+function bindWindPaneel(){
+  const el=$("windVertrekRange"); if(!el) return;
+  el.addEventListener("input",()=>{
+    wind.vertrekU=+el.value;
+    const lab=$("windVertrekVal"); if(lab) lab.textContent = wind.vertrekU ? windTijd(windVertrek()) : "nu";
+    const body=$("windPaneelBody"); if(body) body.innerHTML=windPaneelBody();
+    drawWind();
+  });
 }
 
 function drawNationalVhf(){
@@ -1112,6 +1406,7 @@ function drawPrediction(){
     mapLabel(o.point.lat,o.point.lon,txt,col,28);   // 28px: vrij van de 26px kanaalpin
   });
 
+  if(S.wind && isRoute) haalWind();
   const len=pathLength(path), sail=len/P.v/60;
   const stops=obst.filter(o=>o.pass.wait), blocked=obst.filter(o=>o.pass.blocked);
   const onzeker=stops.filter(o=>o.pass.why==="doorvaarthoogte onbekend"||o.pass.why==="hoogte niet ingesteld");
@@ -1254,7 +1549,8 @@ function setRouteMode(on){
   if(!pos) hintNoPos();   // zonder positie is er geen beginpunt: zeg dat, teken niet stilletjes niets
   else showToast("✏️","Route tekenen","Tik op de kaart om punten toe te voegen. Punten kun je altijd verslepen, of aantikken om ze te verwijderen — ook als deze knop uit staat.",{});
 }
-function clearRoute(){ route=[]; setRouteMode(false); lastBlockedKey=null; drawRouteMarkers(); drawPrediction(); }
+function clearRoute(){ route=[]; setRouteMode(false); lastBlockedKey=null; wind.data=null; wind.sleutel=null;
+  drawRouteMarkers(); drawPrediction(); drawWind(); }
 function hintNoPos(){ showToast("📍","Nog geen positie","Start GPS of zet Simulatie aan (tik dan op de kaart), dan verschijnen de ringen/bolletjes vanaf je boot.",{}); }
 
 /* ---------------- Simulatie ---------------- */
@@ -1397,8 +1693,10 @@ const ABOUT_HTML=`<h3>Over MarifoonPilot</h3>
     <li><b>Dieptedata Waddenzee</b> — Inland ENC / S-57 zeekaarten (Rijkswaterstaat).</li>
     <li><b>Dieptedata IJsselmeergebied</b> — Rijkswaterstaat, bodemhoogte IJsselmeergebied (20 m, t.o.v. NAP), aangevuld met het EMODnet Bathymetry-model waar RWS geen loding heeft. Het meetjaar staat onder de kielspeling.</li>
     <li><b>Scheepvaart (AIS)</b> — API/Service tracks incorporated from EuRIS (eurisportal.eu). Posities van schepen die AIS uitzenden op de Europese binnenwateren.</li>
+    <li><b>Windverwachting</b> — <a href="https://open-meteo.com" style="color:#8fdcff">Open-Meteo</a>, licentie CC-BY 4.0. Modellen: KNMI Harmonie AROME Nederland (2 km, ~2,5 dag vooruit) en ECMWF IFS voor de dagen daarna.</li>
     <li><b>Kaartmateriaal</b> — © OpenStreetMap-bijdragers · OpenSeaMap · Esri World Imagery.</li>
   </ul>
+  <p style="color:#ffce6b;font-size:13px"><b>Over de wind op je route:</b> dat is een <b>verwachting, geen meting</b>, en hij geldt voor 10 m boven open water. In de luwte van een dijk, tussen hoge oevers of vlak onder de wal waait het anders — soms flink. De eerste ~2,5 dag komt uit het KNMI-model van 2 km; daarna uit een globaal model dat grover is, en onder de tabel staat welk van de twee je ziet. Hoe verder vooruit, hoe onzekerder: gebruik de zevendaagse vooruitblik om een dag te kiezen, niet om op te varen.</p>
   <p style="color:#ffce6b;font-size:13px"><b>Over de AIS-scheepvaart:</b> de schepen komen van <b>EuRIS</b> (eurisportal.eu). AIS toont uitsluitend schepen die zelf uitzenden — de meeste pleziervaart doet dat niet — en een positie is enkele minuten oud. Een leeg stuk kaart betekent dus niet dat er niets vaart. Gebruik het als aanvulling op uitkijken en op je marifoon, nooit als vervanging. EuRIS schermt de identiteit van vrijwel alle binnenvaartschepen af; afmetingen, koers en snelheid komen wel door, een scheepsnaam meestal niet.</p>
   <p style="color:#ffce6b;font-size:13px"><b>Over doorvaarthoogtes:</b> die gelden t.o.v. het streefpeil en wisselen met het waterpeil. Waar de app de hoogte niet kent, rekent hij altijd met een brugopening en zet er <i>hoogte ?</i> bij. Controleer altijd de Wateralmanak deel 2.</p>
   <button class="ok" onclick="closeModal()">Begrepen</button>`;
@@ -1567,6 +1865,7 @@ window.addEventListener("DOMContentLoaded",()=>{
   $("tgClear").addEventListener("click",clearRoute);
   $("btnMayday").addEventListener("click",openMayday);
   $("btnAnchor").addEventListener("click",toggleAnchor);
+  const wb=$("windBadge"); if(wb) wb.addEventListener("click",openWindPaneel);
   $("btnAbout").addEventListener("click",()=>openModal(ABOUT_HTML));
   $("disclaimerHint").addEventListener("click",()=>openModal(ABOUT_HTML));
   $("btnTestAlert").addEventListener("click",()=>{ needsAck=false; triggerChannelAlert({source:"point",channel:20,post:"Houtribsluizen",reason:"Test"},480); if(pos)render(); });
