@@ -1011,8 +1011,65 @@ function windTrajecten(){
  * VANDAAN komt, en de veren aan de bovenkant tellen de snelheid. Halve veer 5 knopen,
  * hele veer 10, wimpel 50. Een zeiler leest daar richting en kracht in een oogopslag uit,
  * ook tussen de boeisymbolen waar een getalletje verdrinkt. */
+/* De veren komen niet op de meetpunten te staan maar HALVERWEGE tussen de tijd-bolletjes.
+ * De bolletjes staan om de P.interval minuten (stepM meter); de veren op (k+0,5)*stepM.
+ * Twee dingen tegelijk daarmee opgelost: ze botsen nooit met een bolletje, en je leest de
+ * kaart als een tijdlijn - bolletje, wind, bolletje, wind. En omdat predParams() dat
+ * interval al aanpast aan zoom en snelheid, schalen de veren vanzelf mee met je zoomniveau.
+ *
+ * De wind zelf komt van het dichtstbijzijnde MEETpunt; die halen we los op, om de 2 km.
+ * Bewust niet interpoleren tussen twee meetpunten: dan zou ik een waarde tonen die nergens
+ * uit het model komt. Welk meetpunt het werd staat in de popup. */
+/* Hoe fijn zetten we de veren? Basis is de afstand tussen twee tijd-bolletjes, en dan
+ * halveren we zolang ze op het scherm nog ruim uit elkaar staan. Halveren houdt ze buiten
+ * de bolletjes: die staan op hele stappen (1, 2, 3 x stepM), de veren op halve van de
+ * gekozen spatiering (0,5 / 1,5 ...  of 0,25 / 0,75 ... ), dus nooit op een geheel getal. */
+function windSpatiering(path, stepM, lengte){
+  let sp=stepM;
+  const mid=lengte*0.5;
+  for(let n=0;n<3;n++){
+    const a=map.latLngToContainerPoint(puntOpAfstand(path, Math.max(0, mid-sp/2)));
+    const b=map.latLngToContainerPoint(puntOpAfstand(path, Math.min(lengte, mid+sp/2)));
+    if(a.distanceTo(b) <= WIND_MIN_PX*2.2) break;
+    sp/=2;
+  }
+  return sp;
+}
+
+function windHaken(){
+  if(!wind.data || !wind.punten.length) return [];
+  const path=livePath(); if(path.length<2) return [];
+  const P=predParams(); if(!P) return [];
+  const lengte=pathLength(path);
+  const basis=P.v*P.interval*60;
+  if(!(basis>0) || lengte<1) return [];
+  const stepM=windSpatiering(path, basis, lengte);
+  const obst = S.lockDelay>0 ? routeObstacles(path) : [];
+  const vertrek=windVertrek();
+  const uit=[];
+  for(let d=stepM*0.5; d<lengte && uit.length<40; d+=stepM){
+    let idx=0, best=Infinity;
+    for(let i=0;i<wind.punten.length;i++){
+      const v=Math.abs(wind.punten[i].afst-d);
+      if(v<best){ best=v; idx=i; }
+    }
+    const t=vertrek + (d/P.v)*1000 + waitBefore(d,obst)*60000;
+    const w=windOp(idx,t);
+    if(!w) continue;
+    const pt=puntOpAfstand(path,d);
+    // koers uit een stukje vóór en ná het punt, zodat hij ook in een bocht klopt
+    const delta=Math.max(60, stepM*0.15);
+    const van=puntOpAfstand(path, Math.max(0, d-delta));
+    const naar=puntOpAfstand(path, Math.min(lengte, d+delta));
+    const koers=bearing(van[0],van[1],naar[0],naar[1]);
+    uit.push({ pt:{lat:pt[0],lon:pt[1],afst:d}, tijd:t, koers:koers, w:w,
+               hoek:windHoek(koers,w.uit) });
+  }
+  return uit;
+}
+
 function windVeerIcon(w, hoek){
-  const g=sc(46), c=g/2;
+  const g=sc(58), c=g/2;
   /* De veer is WIT, niet in de kleur van de hoek. Dat was hij eerst wel, en dan ligt een
    * paarse veer op een paarse band en zie je hem niet. Zo heeft kleur precies een taak -
    * de band vertelt de zeilbaarheid - en de veer een andere: richting en kracht. Wit met
@@ -1057,6 +1114,12 @@ function puntOpAfstand(path, d){
  * had ik er eerst in zitten en dan snijdt de gekleurde band bochten af - bij een route met
  * een lus liep hij dwars over land. Een lijn die niet op de route ligt is erger dan geen
  * lijn, want je leest hem als de route. */
+/* De band moet de route begeleiden, niet overschreeuwen. Dikte hangt aan het zoomniveau
+ * en niet aan de leesafstand-instelling: uitgezoomd een dunne draad, ingezoomd een band. */
+function windBandDikte(){
+  return Math.max(2, Math.min(7, (map.getZoom()-8)*1.1));
+}
+
 function drawWindRoute(trajecten){
   const path=livePath();
   if(path.length<2 || trajecten.length<2) return;
@@ -1072,7 +1135,7 @@ function drawWindRoute(trajecten){
     const stuk=[puntOpAfstand(path,van)];
     for(let i=0;i<path.length;i++) if(cum[i]>van && cum[i]<tot) stuk.push(path[i]);
     stuk.push(puntOpAfstand(path,tot));
-    L.polyline(stuk,{color:(a.hoek?a.hoek.kleur:"#bfeeff"), weight:sc(9), opacity:.8,
+    L.polyline(stuk,{color:(a.hoek?a.hoek.kleur:"#bfeeff"), weight:windBandDikte(), opacity:.5,
       lineCap:"round", lineJoin:"round", interactive:false}).addTo(windLayer);
   }
 }
@@ -1103,9 +1166,8 @@ function drawWind(){
   windLayer.clearLayers();
   updateWindBadge();
   if(!S.wind || !wind.data) return;
-  const tr=windTrajecten();
-  drawWindRoute(tr);                 // de band gebruikt ALLE punten: fijne kleurovergang
-  for(const t of windZichtbaar(tr)){ // de veren alleen wat past op dit zoomniveau
+  drawWindRoute(windTrajecten());    // de band gebruikt ALLE meetpunten: fijne kleurovergang
+  for(const t of windZichtbaar(windHaken())){  // de veren tussen de tijd-bolletjes
     L.marker([t.pt.lat,t.pt.lon],{icon:windVeerIcon(t.w,t.hoek),zIndexOffset:120})
       .bindPopup(windPopup(t)).addTo(windLayer);
     // Alleen het getal, klein en onder de veer. De richting zit al in de veer; een vol
