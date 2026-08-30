@@ -871,33 +871,39 @@ const WIND_MODELLEN = [
   { id:"ecmwf_ifs025",                    naam:"ECMWF IFS" }
 ];
 const WIND_MAX_PUNTEN = 12;
-const WIND_STAP_M = 8000;      // extra meetpunt om de zoveel meter, naast elk routepunt
+const WIND_STAP_M = 4000;      // richtafstand tussen meetpunten; bepaalt hoeveel veren
+                               // je op de route krijgt. Lager = meer detail, maar ze
+                               // mogen elkaar op het scherm niet gaan overlappen.
 
 let wind={ punten:[], data:null, sleutel:null, bezig:false, fout:null, vertrekU:0 };
 
 /* Meetpunten langs de route: elk routepunt, plus tussenpunten op lange trajecten. */
 function windPunten(path){
   if(!path || path.length<2) return [];
-  const uit=[{lat:path[0][0], lon:path[0][1], afst:0}];
-  let acc=0;
-  for(let i=0;i<path.length-1;i++){
+  const lengte=pathLength(path);
+  if(lengte<1) return [];
+  /* Eerder zette ik een meetpunt op ELK routepunt plus om de 8 km. Bij een route met
+   * acht punten binnen dertien kilometer levert dat een kluwen veren en getallen over
+   * elkaar heen - technisch aanwezig, visueel waardeloos. Nu verdelen we een beperkt
+   * aantal punten gelijkmatig over de lengte, zodat ze op het scherm uit elkaar blijven
+   * ongeacht hoe fijn je de route hebt geklikt. */
+  const n=Math.max(2, Math.min(WIND_MAX_PUNTEN, Math.round(lengte/WIND_STAP_M)+1));
+  const stap=lengte/(n-1);
+  const uit=[];
+  let acc=0, doel=0, i=0;
+  while(i<path.length-1 && uit.length<n){
     const la1=path[i][0],lo1=path[i][1],la2=path[i+1][0],lo2=path[i+1][1];
     const seg=haversine(la1,lo1,la2,lo2)||1e-9;
-    let d=WIND_STAP_M;
-    while(d<seg){
-      const f=d/seg;
-      uit.push({lat:la1+(la2-la1)*f, lon:lo1+(lo2-lo1)*f, afst:acc+d});
-      d+=WIND_STAP_M;
+    while(doel<=acc+seg && uit.length<n){
+      const f=(doel-acc)/seg;
+      uit.push({lat:la1+(la2-la1)*f, lon:lo1+(lo2-lo1)*f, afst:doel});
+      doel+=stap;
     }
-    acc+=seg;
-    uit.push({lat:la2, lon:lo2, afst:acc});
+    acc+=seg; i++;
   }
-  // gelijkmatig uitdunnen tot het maximum; begin- en eindpunt blijven altijd staan
-  if(uit.length>WIND_MAX_PUNTEN){
-    const stap=(uit.length-1)/(WIND_MAX_PUNTEN-1), dun=[];
-    for(let i=0;i<WIND_MAX_PUNTEN;i++) dun.push(uit[Math.round(i*stap)]);
-    return dun;
-  }
+  const eind=path[path.length-1];
+  if(!uit.length || uit[uit.length-1].afst < lengte-1)
+    uit.push({lat:eind[0], lon:eind[1], afst:lengte});
   return uit;
 }
 
@@ -991,18 +997,70 @@ function windTrajecten(){
   return uit;
 }
 
-function windPijlIcon(w, hoek){
-  const g=sc(30);
+/* Een windveer, zoals op elke weerkaart: de stok wijst naar de richting waar de wind
+ * VANDAAN komt, en de veren aan de bovenkant tellen de snelheid. Halve veer 5 knopen,
+ * hele veer 10, wimpel 50. Een zeiler leest daar richting en kracht in een oogopslag uit,
+ * ook tussen de boeisymbolen waar een getalletje verdrinkt. */
+function windVeerIcon(w, hoek){
+  const g=sc(46), c=g/2;
   const kleur = hoek ? hoek.kleur : "#bfeeff";
-  // De pijl wijst mee met de wind (waarheen het waait), zoals op elke weerkaart.
-  const draai = (w.uit+180)%360;
-  const dik = w.kn>=22 ? 2.6 : 1.8;
-  return L.divIcon({className:"",iconSize:[g,g],iconAnchor:[g/2,g/2],
-    html:'<div style="width:'+g+'px;height:'+g+'px;display:flex;align-items:center;justify-content:center">'
-      +'<svg width="'+g+'" height="'+g+'" viewBox="0 0 24 24" style="transform:rotate('+draai+'deg)">'
-      +'<path d="M12 2 L12 20 M12 20 L8 15 M12 20 L16 15" stroke="'+kleur+'" stroke-width="'+dik+'" '
-      +'fill="none" stroke-linecap="round" stroke-linejoin="round" '
-      +'style="filter:drop-shadow(0 0 2px #000) drop-shadow(0 0 2px #000)"/></svg></div>'});
+  const kn=Math.max(0, Math.round(w.kn/5)*5);
+  const staafTop=c-g*0.34, staafBod=c;
+  const stapY=g*0.075, lang=g*0.20, kort=g*0.11;
+  let y=staafTop, d='', rest=kn;
+  while(rest>=50){ d+='M'+c+' '+y+' L'+(c+lang)+' '+(y-stapY*0.7)+' L'+c+' '+(y+stapY*1.15)+' Z '; y+=stapY*1.5; rest-=50; }
+  while(rest>=10){ d+='M'+c+' '+y+' L'+(c+lang)+' '+(y-stapY*0.8)+' '; y+=stapY; rest-=10; }
+  if(rest>=5){ if(y===staafTop) y+=stapY; d+='M'+c+' '+y+' L'+(c+kort)+' '+(y-stapY*0.45)+' '; }
+  const stil  = kn<3 ? '<circle cx="'+c+'" cy="'+c+'" r="'+(g*0.10)+'" fill="none" stroke="'+kleur+'" stroke-width="2"/>' : '';
+  const staaf = kn>=3 ? '<path d="M'+c+' '+staafBod+' L'+c+' '+staafTop+'" stroke="'+kleur+'" stroke-width="2.4" stroke-linecap="round"/>' : '';
+  const veren = d ? '<path d="'+d+'" stroke="'+kleur+'" stroke-width="2.4" fill="'+kleur+'" stroke-linejoin="round"/>' : '';
+  return L.divIcon({className:"",iconSize:[g,g],iconAnchor:[c,c],
+    html:'<div style="width:'+g+'px;height:'+g+'px;filter:drop-shadow(0 0 2px #000) drop-shadow(0 0 3px #000)">'
+      +'<svg width="'+g+'" height="'+g+'" viewBox="0 0 '+g+' '+g+'" style="transform:rotate('+w.uit+'deg)">'
+      +staaf+veren+stil+'</svg></div>'});
+}
+
+/* De routelijn zelf inkleuren naar zeilbaarheid: rood waar de wind pal tegen staat en je
+ * moet kruisen, groen waar je gewoon loopt. Dat is wat je van een afstand ziet - de veren
+ * geven het detail, de kleur geeft het verhaal. */
+/* Punt op afstand d langs het pad. */
+function puntOpAfstand(path, d){
+  let acc=0;
+  for(let i=0;i<path.length-1;i++){
+    const seg=haversine(path[i][0],path[i][1],path[i+1][0],path[i+1][1])||1e-9;
+    if(acc+seg>=d){ const f=(d-acc)/seg;
+      return [path[i][0]+(path[i+1][0]-path[i][0])*f, path[i][1]+(path[i+1][1]-path[i][1])*f]; }
+    acc+=seg;
+  }
+  return path[path.length-1];
+}
+
+/* De routelijn inkleuren naar zeilbaarheid: rood waar de wind pal tegen staat en je moet
+ * kruisen, groen waar je gewoon loopt. Dat is wat je van een afstand ziet - de veren geven
+ * het detail, de kleur geeft het verhaal.
+ *
+ * LET OP: dit volgt het PAD, niet de rechte lijn tussen twee meetpunten. Die kortsluiting
+ * had ik er eerst in zitten en dan snijdt de gekleurde band bochten af - bij een route met
+ * een lus liep hij dwars over land. Een lijn die niet op de route ligt is erger dan geen
+ * lijn, want je leest hem als de route. */
+function drawWindRoute(trajecten){
+  const path=livePath();
+  if(path.length<2 || trajecten.length<2) return;
+  // cumulatieve afstand per pad-hoekpunt, zodat we tussenliggende hoekpunten kunnen meenemen
+  const cum=[0];
+  for(let i=0;i<path.length-1;i++)
+    cum.push(cum[i]+(haversine(path[i][0],path[i][1],path[i+1][0],path[i+1][1])||1e-9));
+
+  for(let k=0;k<trajecten.length-1;k++){
+    const a=trajecten[k], b=trajecten[k+1];
+    if(!a.w) continue;
+    const van=a.pt.afst, tot=b.pt.afst;
+    const stuk=[puntOpAfstand(path,van)];
+    for(let i=0;i<path.length;i++) if(cum[i]>van && cum[i]<tot) stuk.push(path[i]);
+    stuk.push(puntOpAfstand(path,tot));
+    L.polyline(stuk,{color:(a.hoek?a.hoek.kleur:"#bfeeff"), weight:sc(8), opacity:.65,
+      lineCap:"round", lineJoin:"round", interactive:false}).addTo(windLayer);
+  }
 }
 
 function drawWind(){
@@ -1010,18 +1068,24 @@ function drawWind(){
   windLayer.clearLayers();
   updateWindBadge();
   if(!S.wind || !wind.data) return;
-  for(const t of windTrajecten()){
+  const tr=windTrajecten();
+  drawWindRoute(tr);
+  for(const t of tr){
     if(!t.w) continue;
-    L.marker([t.pt.lat,t.pt.lon],{icon:windPijlIcon(t.w,t.hoek),zIndexOffset:80,interactive:true})
+    L.marker([t.pt.lat,t.pt.lon],{icon:windVeerIcon(t.w,t.hoek),zIndexOffset:120})
       .bindPopup(windPopup(t)).addTo(windLayer);
-    mapLabelWind(t.pt.lat, t.pt.lon, fmtKn(t.w.kn)+" kn "+compass(t.w.uit), t.hoek?t.hoek.kleur:"#bfeeff");
+    // Alleen het getal, klein en onder de veer. De richting zit al in de veer; een vol
+    // tekstlabel per punt maakte er tussen de boeisymbolen een onleesbare brij van.
+    windGetal(t.pt.lat, t.pt.lon, fmtKn(t.w.kn), t.hoek?t.hoek.kleur:"#bfeeff");
   }
 }
-function mapLabelWind(lat,lon,text,kleur){
-  const w=sc(110);
-  L.marker([lat,lon],{interactive:false,icon:L.divIcon({className:"",iconSize:[w,sc(14)],iconAnchor:[w/2,sc(-8)],
-    html:'<div style="width:'+w+'px;text-align:center;color:'+kleur+';font-weight:800;font-size:'+sc(11)+'px;'
-      +'text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000">'+escapeHtml(text)+'</div>'})}).addTo(windLayer);
+
+function windGetal(lat,lon,tekst,kleur){
+  const w=sc(54);
+  L.marker([lat,lon],{interactive:false,zIndexOffset:110,
+    icon:L.divIcon({className:"",iconSize:[w,sc(14)],iconAnchor:[w/2,sc(-16)],
+      html:'<div style="width:'+w+'px;text-align:center;color:'+kleur+';font-weight:800;font-size:'+sc(12)+'px;'
+        +'text-shadow:0 0 3px #000,0 0 3px #000,0 0 4px #000">'+escapeHtml(tekst)+'</div>'})}).addTo(windLayer);
 }
 
 function windTijd(t){
