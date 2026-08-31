@@ -27,6 +27,13 @@
     /* Kaart-UI-schaal: volgt de leesafstand, maar afgetopt op 1.6 zodat de knoppenbalk
        ook op een telefoonscherm op één regel blijft passen. */
     --mui:clamp(1, var(--dist), 1.6);
+    /* Tekstschaal: hetzelfde idee, maar voor de gewone tekst. Die stond tot nu toe in
+       vaste pixels, waardoor de leesafstand-instelling wél de cijfers vergrootte en niet
+       de menu's, koppen, lijsten en de onderbalk — precies waar je op leesafstand
+       tegenaan kijkt. De onderbalk krijgt een lagere bovengrens, want vijf labels moeten
+       naast elkaar op één regel blijven passen. */
+    --tui:clamp(1, var(--dist), 1.8);
+    --nui:clamp(1, var(--dist), 1.35);
     --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
     --safe-l:env(safe-area-inset-left,0px); --safe-r:env(safe-area-inset-right,0px);
   }
@@ -433,6 +440,9 @@
     background:rgba(255,206,107,.10);border-bottom:1px solid rgba(255,206,107,.30)}
   .gpsbar.show{display:flex}
   .gpsbar.err{background:rgba(255,107,107,.10);border-bottom-color:rgba(255,107,107,.35)}
+  /* Simulatie krijgt een eigen kleur: het is geen waarschuwing maar een andere werkelijkheid. */
+  .gpsbar.sim{background:rgba(180,92,255,.13);border-bottom-color:rgba(180,92,255,.40)}
+  .gpsbar.sim .gb-i{stroke:#c78bff}
   .gb-i{width:20px;height:20px;flex:0 0 auto;fill:none;stroke:var(--warn);stroke-width:1.8;
     stroke-linecap:round;stroke-linejoin:round}
   .gpsbar.err .gb-i{stroke:#ff8f8f}
@@ -461,30 +471,46 @@
      achteraan zodat het de bovenstaande maten overschrijft.
      ============================================================ */
   /* Onderste navigatiebalk */
-  nav button{font-size:13px;font-weight:800;padding:9px 2px 8px;gap:4px}
-  nav button .ni{font-size:27px}
+  nav button{font-size:calc(13px * var(--nui));font-weight:800;
+    padding:calc(9px * var(--nui)) 2px calc(8px * var(--nui));gap:calc(4px * var(--nui))}
+  nav button .ni{font-size:calc(27px * var(--nui))}
+  nav button .ni svg{width:calc(21px * var(--nui));height:calc(21px * var(--nui))}
   /* Koptekst */
-  .brand{font-size:17px}
-  .gps{font-size:13px}
-  .iconbtn{font-size:16px;padding:9px 12px}
+  .brand{font-size:calc(17px * var(--tui))}
+  .gps{font-size:calc(13px * var(--tui))}
+  .iconbtn{font-size:calc(16px * var(--tui));padding:calc(9px * var(--tui)) calc(12px * var(--tui))}
   /* Sectiekoppen en lijsten */
-  h2.sec{font-size:15px}
-  .row .name .a{font-size:16px}
-  .row .name .b{font-size:13px}
-  .tag{font-size:11px}
-  .hint{font-size:13px;line-height:1.45}
+  h2.sec{font-size:calc(15px * var(--tui))}
+  .row .name .a{font-size:calc(16px * var(--tui))}
+  .row .name .b{font-size:calc(13px * var(--tui))}
+  .tag{font-size:calc(11px * var(--tui))}
+  .hint{font-size:calc(13px * var(--tui));line-height:1.45}
   /* Instellingen */
-  .set .lab{font-size:16px}
-  .set .sub{font-size:13px}
-  .seg button{font-size:14px}
+  .set .lab{font-size:calc(16px * var(--tui))}
+  .set .sub{font-size:calc(13px * var(--tui))}
+  .seg button{font-size:calc(14px * var(--tui))}
   /* Co-schipper / veiligheid */
-  .coskip .k{font-size:12px}
-  .coskip .s{font-size:13px}
-  .safety-big .l{font-size:13px}
+  .coskip .k{font-size:calc(12px * var(--tui))}
+  .coskip .s{font-size:calc(13px * var(--tui))}
+  .safety-big .l{font-size:calc(13px * var(--tui))}
+  /* Locatiebalk en diagnose schalen mee: juist die moet je kunnen lezen */
+  .gb-t{font-size:calc(13.5px * var(--tui))}
+  .gb-s{font-size:calc(11.5px * var(--tui))}
+  .gb-btn{font-size:calc(14px * var(--tui));padding:calc(10px * var(--tui)) calc(15px * var(--tui))}
+  .diag{font-size:calc(11.5px * var(--tui))}
+  .modal h3{font-size:calc(20px * var(--tui))}
+  .modal p,.modal ul,.modal ol{font-size:calc(14px * var(--tui))}
+  .modal .ok{font-size:calc(16px * var(--tui))}
+  #toast .tt .h{font-size:calc(16px * var(--tui))}
+  #toast .tt .p{font-size:calc(14px * var(--tui))}
+  #toast button{font-size:calc(14px * var(--tui))}
+  .start-btn{font-size:calc(clamp(1rem,3vmin,1.2rem) * var(--tui))}
   /* Meetwaarde-tegels (label iets groter, waarde blijft schalen) */
   .tile .k{font-size:calc(clamp(.75rem,2.1vmin,.95rem) * clamp(1,var(--dist),1.3))}
-  /* Kaart-icoontjes/knoppen iets groter op de telefoon */
-  @media (max-width:759px){ :root{ --mui:1.2; } }
+  /* Kaart-icoontjes/knoppen iets groter op de telefoon. En een ondergrens voor de tekst:
+     op armlengte, met de telefoon in een houder en zonleesbaarheid erbij, is de kale
+     basismaat te klein gebleken. Wie meer wil, zet de leesafstand hoger. */
+  @media (max-width:759px){ :root{ --mui:1.2; --tui:clamp(1.15, var(--dist), 1.8); --nui:clamp(1.1, var(--dist), 1.35); } }
   /* Op de kaart telt elke pixel kaartbeeld. De koptekst krimpt daar tot een dunne
      statusstrook: de app-naam is er decor, het GPS-bolletje niet — dat blijft leesbaar. */
   @media (max-width:759px){
@@ -780,7 +806,7 @@
         </div>
       </div>
 
-      <div class="hint">Versie 5.2.0 · GPS start vanzelf · locatie-diagnose · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
+      <div class="hint">Versie 5.2.1 · GPS start vanzelf · locatie-diagnose · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
     </section>
   </main>
 
@@ -805,12 +831,12 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <!-- ?v= meeverhogen bij elke release: garandeert dat browsers de nieuwe JS pakken
      en niet een oude versie uit hun HTTP-cache blijven serveren. -->
-<script src="config.js?v=5.2.0"></script>
-<script src="data.js?v=5.2.0"></script>
-<script src="vhf-points.js?v=5.2.0"></script>
-<script src="fairway-depths.js?v=5.2.0"></script>
-<script src="obstacles.js?v=5.2.0"></script>
-<script src="stations.js?v=5.2.0"></script>
-<script src="app.js?v=5.2.0"></script>
+<script src="config.js?v=5.2.1"></script>
+<script src="data.js?v=5.2.1"></script>
+<script src="vhf-points.js?v=5.2.1"></script>
+<script src="fairway-depths.js?v=5.2.1"></script>
+<script src="obstacles.js?v=5.2.1"></script>
+<script src="stations.js?v=5.2.1"></script>
+<script src="app.js?v=5.2.1"></script>
 </body>
 </html>

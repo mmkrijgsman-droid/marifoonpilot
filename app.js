@@ -1,7 +1,7 @@
 /* MarifoonPilot v2 – applicatielogica */
 "use strict";
 
-const APP_VERSIE = "5.2.0";
+const APP_VERSIE = "5.2.1";
 
 /* Een fout in de opstart laat de app stil doodgaan: je ziet een scherm dat niets doet en
  * je hebt geen idee waarom. Daarom vangen we ze op en zetten ze in de diagnose (en, als de
@@ -581,12 +581,51 @@ function toonGpsHerstel(aan,label){
  * concrete tik erbij — nooit een mededeling waar de schipper niets mee kan. */
 function toonGpsBalk(soort,titel,sub,knop,actie){
   const b=$("gpsBar"); if(!b) return;
-  if(!soort){ b.classList.remove("show","err"); gpsBalkActie=null; return; }
+  if(!soort){
+    // Simulatie is geen achtergrondinstelling maar een andere werkelijkheid: die melding
+    // blijft staan zolang hij aan is, ook als er verder niets te melden valt.
+    if(S.sim) return simBalk();
+    b.classList.remove("show","err","sim"); gpsBalkActie=null; return;
+  }
   $("gpsBarT").textContent=titel; $("gpsBarS").textContent=sub;
   $("gpsBarBtn").textContent=knop; gpsBalkActie=actie;
-  b.classList.toggle("err", soort==="err"); b.classList.add("show");
+  b.classList.toggle("err", soort==="err"); b.classList.toggle("sim", soort==="sim"); b.classList.add("show");
   if(map) setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } },60);
 }
+/* Met simulatie aan gooit de app elke echte positie weg en wacht hij op een tik op de kaart.
+ * Dat is precies waar iemand dagen naar een kapotte GPS kan zoeken, dus staat het er zolang
+ * het aanstaat — op elk scherm, met de uitknop erbij. */
+function simBalk(){
+  const b=$("gpsBar"); if(!b) return;
+  $("gpsBarT").textContent="Simulatie staat aan";
+  $("gpsBarS").textContent="De app gebruikt je echte GPS niet — je positie komt van de kaart.";
+  $("gpsBarBtn").textContent="Zet uit"; gpsBalkActie=simUit;
+  b.classList.remove("err"); b.classList.add("sim","show");
+  if(map) setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } },60);
+}
+/* Aan- en uitzetten hoort één handeling te zijn. Hiervoor kon je simulatie alleen áánzetten
+ * met de knop op Varen; uitzetten kon uitsluitend via een schakelaar diep in Instellingen.
+ * Wie de knop nog eens indrukte zag niets gebeuren en zat vast in een app die zijn echte
+ * positie negeerde. */
+function zetSim(on){
+  S.sim=!!on; save();
+  const cb=$("setSim"); if(cb) cb.checked=S.sim;
+  document.body.classList.toggle("sim",S.sim);
+  updateSimKnop();
+  if(S.sim){
+    if(watchId!=null && gpsBruikbaar()){ navigator.geolocation.clearWatch(watchId); watchId=null; }
+    updateGpsBadge(null); simBalk(); showView("map");
+    showToast("🧭","Simulatie aan","Tik op de kaart om je positie te kiezen.",{});
+  } else {
+    lastSim=null; toonGpsBalk(null); startGPS(true);
+    showToast("📡","Simulatie uit","De app zoekt weer je echte positie.",{});
+  }
+}
+function updateSimKnop(){
+  const b=$("btnSim"); if(b) b.textContent = S.sim ? "Simulatie uitzetten" : "Simulatie";
+}
+function simUit(){ zetSim(false); }
+
 /* Vraagt de browser niets uit zichzelf, dan is het aan ons om ernaar te vragen. Chrome mag
  * een locatieverzoek dat niet uit een tik voortkomt stil afhandelen: geen venster, geen
  * fout, niets. Na een paar seconden stilte zetten we daarom een echte knop neer — een
@@ -710,8 +749,9 @@ function onPos(p){
   clearTimeout(gpsWatchdog); gpsWatchdog=null;
   clearTimeout(gpsVraagTimer); gpsVraagTimer=null;
   gpsFixen++; gpsFout=null;
-  toonGpsHerstel(false); toonGpsBalk(null);
-  if(S.sim) return;
+  toonGpsHerstel(false);
+  if(S.sim){ simBalk(); return; }   // simulatie wint: deze positie wordt niet gebruikt
+  toonGpsBalk(null);
   const c=p.coords;
   prevPos=pos;
   pos={ lat:c.latitude, lon:c.longitude, acc:c.accuracy, speed:c.speed, heading:c.heading, t:p.timestamp };
@@ -2357,12 +2397,8 @@ function initSettings(){
   bindRange("draftRange","draftVal","draft",v=>fmtNum(v,2)+" m");
   bindRange("marginRange","marginVal","margin",v=>fmtNum(v,2)+" m");
   bindRange("anchorRad","anchorRadVal","anchorRadius",v=>v+" m");
-  bindToggle("setSim","sim",on=>{ document.body.classList.toggle("sim",on); updateGpsBadge(on?null:(pos?pos.acc:null));
-    if(on){
-      if(watchId!=null){ navigator.geolocation.clearWatch(watchId); watchId=null; }   // ontvanger uit: de positie komt van de kaart
-      showView("map"); showToast("🧭","Simulatie aan","Tik op de kaart om je positie te kiezen.",{});
-    } else { lastSim=null; startGPS(true); } });
-  $("setSim").checked=S.sim; document.body.classList.toggle("sim",S.sim);
+  bindToggle("setSim","sim",on=>zetSim(on));
+  $("setSim").checked=S.sim; document.body.classList.toggle("sim",S.sim); updateSimKnop();
   $("depthFile").addEventListener("change",e=>{ if(e.target.files[0]) loadDepthFile(e.target.files[0]); });
 
   // AIS: schakelaar en proxy-URL. Zonder URL blijft de laag uit — zie tools/proxy/.
@@ -2441,9 +2477,7 @@ window.addEventListener("DOMContentLoaded",()=>{
     if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(klaar).catch(()=>toonDiagVal(t));
     else toonDiagVal(t);
   });
-  $("btnSim").addEventListener("click",()=>{ $("setSim").checked=true; S.sim=true; save(); document.body.classList.toggle("sim",true);
-    if(watchId!=null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
-    updateGpsBadge(null); showView("map"); showToast("🧭","Simulatie aan","Tik op de kaart om je positie te kiezen.",{}); });
+  $("btnSim").addEventListener("click",()=>zetSim(!S.sim));
   $("btnAck").addEventListener("click",ackAlert);
   $("toastOk").addEventListener("click",()=>{
     if(pendingReload){ applyUpdate(); return; }
@@ -2490,7 +2524,8 @@ window.addEventListener("DOMContentLoaded",()=>{
   registerSW();
   /* GPS hoort vanaf de start te lopen: op het water zet je geen knop meer aan.
    * Draait de simulatie, dan blijft de ontvanger uit — die positie komt van de kaart. */
-  if(S.sim) updateGpsBadge(null); else startGPS(false);
+  updateSimKnop();
+  if(S.sim){ updateGpsBadge(null); simBalk(); } else startGPS(false);
   /* De AudioContext mag pas open na een gebaar. Vroeger deed de startknop dat; nu die weg
    * is, doet de eerste tik of toetsaanslag het, anders blijft het kanaalalarm stil. */
   ["pointerdown","keydown"].forEach(ev=>document.addEventListener(ev,unlockAudio,{once:true}));
