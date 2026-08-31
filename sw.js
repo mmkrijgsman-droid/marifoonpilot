@@ -3,10 +3,10 @@
 // NIET zelf TILE_HOSTS declareren: config.js doet dat met const, en twee declaraties in
 // dezelfde global scope laten importScripts stilletjes falen.
 const HOST_FALLBACK = ["tile.openstreetmap.org", "tiles.openseamap.org", "server.arcgisonline.com"];
-try { importScripts("config.js?v=5.4.0"); } catch (e) { console.warn("sw: config.js niet geladen", e); }
+try { importScripts("config.js?v=5.4.1"); } catch (e) { console.warn("sw: config.js niet geladen", e); }
 const HOSTS = (typeof TILE_HOSTS !== "undefined" && Array.isArray(TILE_HOSTS)) ? TILE_HOSTS : HOST_FALLBACK;
 
-const VERSION = "naviq-v5.4.0";
+const VERSION = "naviq-v5.4.1";
 const SHELL = "shell-" + VERSION;
 const TILES = "tiles-" + VERSION;
 // Dieptetegels apart: die worden pas tijdens het varen opgehaald en mogen de app-shell
@@ -16,8 +16,8 @@ const DEPTH = "depth-" + VERSION;
 
 const SHELL_FILES = [
   // app.js/data.js met dezelfde ?v= als in index.html, anders cachet de SW een andere URL
-  "./", "./index.html", "./config.js?v=5.4.0", "./app.js?v=5.4.0", "./data.js?v=5.4.0",
-  "./vhf-points.js?v=5.4.0", "./fairway-depths.js?v=5.4.0", "./obstacles.js?v=5.4.0", "./stations.js?v=5.4.0", "./manifest.webmanifest",
+  "./", "./index.html", "./config.js?v=5.4.1", "./app.js?v=5.4.1", "./data.js?v=5.4.1",
+  "./vhf-points.js?v=5.4.1", "./fairway-depths.js?v=5.4.1", "./obstacles.js?v=5.4.1", "./stations.js?v=5.4.1", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-180.png",
   "./vendor/leaflet/leaflet.js", "./vendor/leaflet/leaflet.css",
   "./vendor/leaflet/images/marker-icon.png", "./vendor/leaflet/images/marker-shadow.png",

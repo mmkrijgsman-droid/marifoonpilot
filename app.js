@@ -1,7 +1,7 @@
 /* NAVIQ v2 – applicatielogica */
 "use strict";
 
-const APP_VERSIE = "5.4.0";
+const APP_VERSIE = "5.4.1";
 
 /* Een fout in de opstart laat de app stil doodgaan: je ziet een scherm dat niets doet en
  * je hebt geen idee waarom. Daarom vangen we ze op en zetten ze in de diagnose (en, als de
@@ -2222,7 +2222,17 @@ function applyTheme(){
 }
 
 /* ---------------- Leesafstand ---------------- */
-const DIST_PRESET={ phone:1.0, tablet:2.0, cockpit:2.7 };
+// "Telefoon" hoort dezelfde maat te geven als de standaard op een telefoon; stond hij op
+// 1.0, dan maakte juist die knop de app kleiner dan hij uit zichzelf al was.
+const DIST_PRESET={ phone:1.4, tablet:2.0, cockpit:2.7 };
+/* Wie eerder op "Telefoon" tikte heeft 1.0 opgeslagen staan, en dat overschrijft de nieuwe
+ * standaard. Die ene waarde tillen we eenmalig op; een handmatig gezette schuifstand
+ * (distMode is dan null) blijft ongemoeid. */
+function migreerTelefoonMaat(){
+  if(S.distMode==="phone" && S.distFactor!=null && S.distFactor<1.4 && matchMedia("(max-width:759px)").matches){
+    S.distFactor=DIST_PRESET.phone; save();
+  }
+}
 function applyDist(){
   if(S.distFactor!=null){ document.documentElement.style.setProperty("--dist", S.distFactor); }
   const eff = S.distFactor!=null ? S.distFactor : parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--dist"))||1;
@@ -2504,7 +2514,7 @@ function registerSW(){
 window.addEventListener("DOMContentLoaded",()=>{
   buildObstacleList();
   try{ initMap(); }catch(e){ console.warn("kaart init:",e); }
-  buildLists(); initSettings(); applyTheme(); applyDist();
+  buildLists(); initSettings(); applyTheme(); migreerTelefoonMaat(); applyDist();
 
   document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.view)));
   const fix=$("btnGpsFix"); if(fix) fix.addEventListener("click",()=>startGPS(true));

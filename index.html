@@ -55,7 +55,9 @@
   @media (pointer:coarse) and (min-width:760px) and (min-height:600px){ :root{ --dist:2.1; } }
   /* Een telefoon in liggende stand is door zijn lange zijde vaak >760px breed, maar heeft
      niet de hoogte van een tablet/cockpit. Houd hem daarom op telefoonschaal. */
-  @media (orientation:landscape) and (max-height:599px){ :root{ --dist:1; --mui:1; } }
+  /* Telefoon liggend: de hoogte is schaars, dus iets kleiner dan staand — maar niet terug
+     naar de kale basismaat, want dan krimpt de hele app bij het draaien van je toestel. */
+  @media (orientation:landscape) and (max-height:599px){ :root{ --dist:1.2; --mui:1.2; } }
 
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
@@ -383,6 +385,11 @@
     --accentzacht:rgba(255,106,77,.18); --accenttekst:#ffb3a6;
     --schaduw:0 6px 20px rgba(0,0,0,.55)}
   body.night .bc-num,body.night .safety-big .c{color:#ff8f77}
+  /* Teal en amber uit de huisstijl zijn 's nachts te fel: het beeldmerk en het
+     startscherm dempen mee met de rest, anders kost je logo je nachtzicht. */
+  body.night .brand .merk,body.night .sp-merk{filter:saturate(.3) brightness(.85)}
+  body.night .splash{background:#120303;color:#ffcac4}
+  body.night .sp-naam{color:#ffcac4}
   body.night img,body.night #map{filter:brightness(.62) sepia(.35) hue-rotate(-25deg) saturate(1.25)}
   body.night .start-btn{background:#7a2a17;color:#ffd}
   body.night .row .chan,body.night .next .ch{color:#ffb3a6;background:rgba(198,40,40,.2)}
@@ -579,10 +586,12 @@
   .start-btn{font-size:calc(clamp(1rem,3vmin,1.2rem) * var(--tui))}
   /* Meetwaarde-tegels (label iets groter, waarde blijft schalen) */
   .tile .k{font-size:calc(clamp(.75rem,2.1vmin,.95rem) * clamp(1,var(--dist),1.3))}
-  /* Kaart-icoontjes/knoppen iets groter op de telefoon. En een ondergrens voor de tekst:
-     op armlengte, met de telefoon in een houder en zonleesbaarheid erbij, is de kale
-     basismaat te klein gebleken. Wie meer wil, zet de leesafstand hoger. */
-  @media (max-width:759px){ :root{ --mui:1.2; --tui:clamp(1.15, var(--dist), 1.8); --nui:clamp(1.1, var(--dist), 1.35); } }
+  /* Telefoon staand. Eén getal stuurt alles: --dist gaat omhoog en tekst, pictogrammen,
+     kaartbediening en onderbalk volgen vanzelf. De kale basismaat (1) bleek in de praktijk
+     te klein — op armlengte, in een houder, met zon erop. Liggend blijft de kleinere maat
+     staan (zie de regel hieronder): daar is de hoogte schaars en leest het al goed.
+     Wie het tóch kleiner wil, kan met de schuif in Instellingen onder dit getal zakken. */
+  @media (max-width:759px){ :root{ --dist:1.4; } }
   /* Op de kaart telt elke pixel kaartbeeld. De koptekst krimpt daar tot een dunne
      statusstrook: de app-naam is er decor, het GPS-bolletje niet — dat blijft leesbaar. */
   @media (max-width:759px){
@@ -603,8 +612,12 @@
   /* Compacte cockpit voor telefoons in liggende stand: kaartbediening en onderbalk
      laten meer van de kaart over en blijven toch ruim aantikbaar. */
   @media (orientation:landscape) and (max-height:500px){
-    header{padding-top:4px;padding-bottom:4px}.brand{font-size:15px}.gps{font-size:12px}.iconbtn{font-size:14px;padding:7px 9px}
-    nav button{font-size:11px;padding:4px 2px 3px;gap:1px}nav button .ni{font-size:21px}
+    header{padding-top:4px;padding-bottom:4px}
+    .brand{font-size:calc(15px * var(--nui))}.gps{font-size:calc(12px * var(--nui))}
+    .iconbtn{font-size:calc(14px * var(--nui));padding:7px 9px}
+    nav button{font-size:calc(11px * var(--nui));padding:calc(4px * var(--nui)) 2px calc(3px * var(--nui));gap:1px}
+    nav button .ni{font-size:calc(21px * var(--nui))}
+    nav button .ni svg{width:calc(19px * var(--nui));height:calc(19px * var(--nui))}
     .predbar{gap:4px;flex-wrap:nowrap;top:4px}.predbtn{min-height:40px;padding:0 10px;font-size:12px}
     .mapbottom{bottom:8px;gap:4px}.layerpick,.ovbtns{gap:4px}
     .layerpick select,.seabtn{padding:7px 9px;font-size:12px}
@@ -908,7 +921,7 @@
         </div>
       </div>
 
-      <div class="hint">Versie 5.4.0 · nieuwe naam en huisstijl · startscherm · GPS start vanzelf · locatie-diagnose · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
+      <div class="hint">Versie 5.4.1 · nieuwe naam en huisstijl · startscherm · GPS start vanzelf · locatie-diagnose · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
     </section>
   </main>
 
@@ -933,12 +946,12 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <!-- ?v= meeverhogen bij elke release: garandeert dat browsers de nieuwe JS pakken
      en niet een oude versie uit hun HTTP-cache blijven serveren. -->
-<script src="config.js?v=5.4.0"></script>
-<script src="data.js?v=5.4.0"></script>
-<script src="vhf-points.js?v=5.4.0"></script>
-<script src="fairway-depths.js?v=5.4.0"></script>
-<script src="obstacles.js?v=5.4.0"></script>
-<script src="stations.js?v=5.4.0"></script>
-<script src="app.js?v=5.4.0"></script>
+<script src="config.js?v=5.4.1"></script>
+<script src="data.js?v=5.4.1"></script>
+<script src="vhf-points.js?v=5.4.1"></script>
+<script src="fairway-depths.js?v=5.4.1"></script>
+<script src="obstacles.js?v=5.4.1"></script>
+<script src="stations.js?v=5.4.1"></script>
+<script src="app.js?v=5.4.1"></script>
 </body>
 </html>
