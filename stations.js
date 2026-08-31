@@ -1,4 +1,4 @@
-/* MarifoonPilot - meetstations waterstand (GEGENEREERD, niet met de hand aanpassen)
+/* NAVIQ - meetstations waterstand (GEGENEREERD, niet met de hand aanpassen)
  *
  * Bron: Rijkswaterstaat Waterinfo, opgehaald 2026-08-16.
  * Alleen de stationlijst staat hier vast; de actuele waterstanden haalt de app live op

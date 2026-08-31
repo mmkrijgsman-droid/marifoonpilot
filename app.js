@@ -1,7 +1,7 @@
-/* MarifoonPilot v2 – applicatielogica */
+/* NAVIQ v2 – applicatielogica */
 "use strict";
 
-const APP_VERSIE = "5.2.1";
+const APP_VERSIE = "5.3.0";
 
 /* Een fout in de opstart laat de app stil doodgaan: je ziet een scherm dat niets doet en
  * je hebt geen idee waarom. Daarom vangen we ze op en zetten ze in de diagnose (en, als de
@@ -381,7 +381,9 @@ function geenDiepteNoot(){
 
 /* ---------------- Weergave ---------------- */
 function setState(level){
-  const map={ ok:["--ok","--ok2"], warn:["--warn","--warn2"], red:["--alert","--alert2"] };
+  // De tweede kleur is een zachte tint voor de koptekstband, niet de tekstkleur: op wit
+  // zou een verzadigde band de kop onleesbaar maken.
+  const map={ ok:["--ok","--ok3"], warn:["--warn","--warn3"], red:["--alert","--alert3"] };
   const [a,b]=map[level]||map.ok;
   const cs=getComputedStyle(document.documentElement);
   document.documentElement.style.setProperty("--state", cs.getPropertyValue(a).trim());
@@ -463,7 +465,7 @@ function triggerChannelAlert(a, nd){
   const body = a.channel!=null ? "Zet de marifoon op kanaal "+a.channel+"." : "Luister uit op kanaal 16.";
   showToast("📻", title, body, {sticky:true});
   fireAlert();
-  notifySystem("MarifoonPilot — kanaal "+(a.channel??16), title+" • "+body);
+  notifySystem("NAVIQ — kanaal "+(a.channel??16), title+" • "+body);
 }
 function ackAlert(){ needsAck=false; hideToast(); if(pos) render(); }
 function fireAlert(){ if(S.sound) beep(); if(S.vibe && navigator.vibrate) navigator.vibrate([180,90,180]); }
@@ -660,7 +662,7 @@ function gpsHulpModal(){
        eerder is weggetikt: daarna onthoudt hij dat en blijft het stil.</p>
     ${opBeginscherm
       ? `<p><b>De app staat op je beginscherm</b><br>Er is dus geen adresbalk. Ga naar
-           <b>Android → Instellingen → Apps → MarifoonPilot → Machtigingen → Locatie → Toestaan</b>.
+           <b>Android → Instellingen → Apps → NAVIQ → Machtigingen → Locatie → Toestaan</b>.
            Helpt dat niet, verwijder de app van je beginscherm en zet hem er opnieuw op.</p>`
       : `<p><b>In Chrome</b><br>Tik op het slotje of ⓘ links in de adresbalk →
            <b>Machtigingen</b> → <b>Locatie</b> → <b>Toestaan</b>. Staat er <b>Resetten</b>,
@@ -741,7 +743,7 @@ function meldGeweigerd(){
   // tikken: die route bestaat alleen in de browser. Verwijs dan naar de app-instellingen.
   const opBeginscherm = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone===true;
   const waar = opBeginscherm
-    ? "Ga naar Android → Instellingen → Apps → MarifoonPilot → Machtigingen → Locatie → Toestaan. Werkt dat niet, verwijder de app van je beginscherm en zet hem er opnieuw op; de vraag komt dan terug."
+    ? "Ga naar Android → Instellingen → Apps → NAVIQ → Machtigingen → Locatie → Toestaan. Werkt dat niet, verwijder de app van je beginscherm en zet hem er opnieuw op; de vraag komt dan terug."
     : "In Chrome: tik het slotje links in de adresbalk → Machtigingen → Locatie → Toestaan. Staat dat goed, kijk dan bij Android → Instellingen → Apps → Chrome → Machtigingen → Locatie.";
   showToast("⚠️","Locatie geweigerd","De browser mag je locatie niet gebruiken. "+waar,{sticky:true,warn:true});
 }
@@ -782,7 +784,7 @@ function onErr(e){
 function gpsDiagnose(){
   const st=[];
   const staat=(matchMedia&&matchMedia("(display-mode: standalone)").matches)||navigator.standalone===true;
-  st.push("MarifoonPilot "+APP_VERSIE);
+  st.push("NAVIQ "+APP_VERSIE);
   st.push("adres:        "+location.origin+location.pathname);
   st.push("beveiligd:    "+(window.isSecureContext?"ja":"NEE — geolocation werkt niet"));
   st.push("geolocation:  "+(gpsBruikbaar()?"bruikbaar":"ONBRUIKBAAR"));
@@ -2300,8 +2302,8 @@ function openMayday(){
     <button class="ok" onclick="document.getElementById('mayday').classList.remove('show')">Sluiten</button>`;
   $("mayday").classList.add("show");
 }
-const ABOUT_HTML=`<h3>Over MarifoonPilot</h3>
-  <p>MarifoonPilot gebruikt je GPS-positie én vaarrichting om automatisch het juiste marifoonkanaal te adviseren op het IJsselmeer, Markermeer en de Waddenzee. Werkt op telefoon, tablet en laptop — installeer als app en gebruik schermvullend.</p>
+const ABOUT_HTML=`<h3>Over NAVIQ</h3>
+  <p>NAVIQ gebruikt je GPS-positie én vaarrichting om automatisch het juiste marifoonkanaal te adviseren op het IJsselmeer, Markermeer en de Waddenzee. Werkt op telefoon, tablet en laptop — installeer als app en gebruik schermvullend.</p>
   <p><b>Belangrijk — hulpmiddel, geen vervanging.</b> Kanalen en bedieningen kunnen wijzigen. Controleer altijd de <i>Wateralmanak deel 1 &amp; 2</i> en <i>vaarweginformatie.nl</i>. In nood: kanaal 16.</p>
   <p><b>Installeren:</b> iPhone (Safari): deel-icoon ⬆︎ → “Zet op beginscherm”. Android (Chrome): menu ⋮ → “App installeren”.</p>
   <p><b>Bronnen &amp; licenties.</b></p>
@@ -2318,7 +2320,7 @@ const ABOUT_HTML=`<h3>Over MarifoonPilot</h3>
   <p style="color:#ffce6b;font-size:13px"><b>Over de AIS-scheepvaart:</b> de schepen komen van <b>EuRIS</b> (eurisportal.eu). AIS toont uitsluitend schepen die zelf uitzenden — de meeste pleziervaart doet dat niet — en een positie is enkele minuten oud. Een leeg stuk kaart betekent dus niet dat er niets vaart. Gebruik het als aanvulling op uitkijken en op je marifoon, nooit als vervanging. EuRIS schermt de identiteit van vrijwel alle binnenvaartschepen af; afmetingen, koers en snelheid komen wel door, een scheepsnaam meestal niet.</p>
   <p style="color:#ffce6b;font-size:13px"><b>Over doorvaarthoogtes:</b> die gelden t.o.v. het streefpeil en wisselen met het waterpeil. Waar de app de hoogte niet kent, rekent hij altijd met een brugopening en zet er <i>hoogte ?</i> bij. Controleer altijd de Wateralmanak deel 2.</p>
   <button class="ok" onclick="closeModal()">Begrepen</button>`;
-const INTRO_HTML=`<h3>Welkom bij MarifoonPilot ⚓</h3>
+const INTRO_HTML=`<h3>Welkom bij NAVIQ ⚓</h3>
   <p>Automatisch marifoonkanaal-advies op basis van je positie én koers.</p>
   <ul><li>📻 Groot kanaal in beeld, kleur: groen normaal, geel/rood bij een wissel.</li>
   <li>🧭 Waarschuwt pas als je een sluis/brug écht nadert op je koers.</li>
@@ -2435,7 +2437,7 @@ let pendingReload=false, swReg=null, swReloading=false;
 function promptReload(){
   if(pendingReload) return;
   pendingReload=true;
-  showToast("⬆️","Nieuwe versie klaar","Tik op OK om MarifoonPilot te vernieuwen.",{sticky:true});
+  showToast("⬆️","Nieuwe versie klaar","Tik op OK om NAVIQ te vernieuwen.",{sticky:true});
 }
 function applyUpdate(){
   if(swReg && swReg.waiting){ swReg.waiting.postMessage({type:"SKIP_WAITING"}); }

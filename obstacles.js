@@ -1,4 +1,4 @@
-/* MarifoonPilot - vaarwegobstakels (GEGENEREERD, niet met de hand aanpassen)
+/* NAVIQ - vaarwegobstakels (GEGENEREERD, niet met de hand aanpassen)
  *
  * Bron: OpenStreetMap via de Overpass API, opgehaald 2026-08-16.
  * Data (c) OpenStreetMap-bijdragers, licentie ODbL - https://www.openstreetmap.org/copyright

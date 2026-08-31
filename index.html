@@ -3,27 +3,39 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
-<title>MarifoonPilot</title>
+<title>NAVIQ</title>
 <meta name="description" content="GPS-vaarassistent die automatisch het juiste marifoonkanaal adviseert op het IJsselmeer, Markermeer en de Waddenzee. Werkt op telefoon, tablet en laptop." />
-<meta name="theme-color" content="#000000" />
+<meta name="theme-color" content="#ffffff" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" href="icons/icon-192.png" type="image/png" />
 <link rel="apple-touch-icon" href="icons/icon-180.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="MarifoonPilot" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="NAVIQ" />
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
 <style>
   :root{
     /* leesafstand-factor: 1 = telefoon (~1 m). Cockpit (tablet/laptop, 2-3 m) hoger. */
     --dist:1;
     --u:clamp(0.5rem,1.2vmin,1rem);
-    --bg:#000; --bg2:#0a1622; --panel:#0f1f30; --panel2:#13273c; --line:#20364e;
-    --fg:#f2f7fd; --muted:#9db4cf; --accent:#00d0ff; --accent2:#0a4c63;
-    --ok:#17a34a; --ok2:#0f6d33; --warn:#e0a200; --warn2:#8a6400;
-    --alert:#e23b3b; --alert2:#7f1d1d;
-    --state:var(--ok); --state2:var(--ok2);
+    /* NAVIQ-merkkleuren: inkt, teal, amber, wit. */
+    --inkt:#071A2A; --teal:#00B7B5; --amber:#FFB020;
+
+    --bg:#e9eef2; --bg2:#ffffff; --panel:#ffffff; --panel2:#f4f7f9; --line:#dde5ec;
+    --fg:#071A2A; --muted:#5b7183; --accent:#00B7B5; --accent2:#d5f2f2;
+    --opAccent:#ffffff;                 /* tekst op een accentvlak */
+    --ok:#12a150; --ok2:#0c7a3c; --ok3:#ddf3e5;
+    --warn:#FFB020; --warn2:#8a5b00; --warn3:#fff1d6;
+    --alert:#e23b3b; --alert2:#9b1c1c; --alert3:#ffdede;
+    --state:var(--ok); --state2:var(--ok3);
+
+    /* Zwevende panelen op de kaart en de kleine hulpkleuren die daarbij horen. Als tokens,
+       want ze moeten in nachtmodus in één keer om kunnen. */
+    --glas:rgba(255,255,255,.92); --glasrand:rgba(7,26,42,.10); --glaslijn:rgba(7,26,42,.10);
+    --vlak:rgba(7,26,42,.05); --kopje:#6b7d8f;
+    --accentzacht:rgba(0,183,181,.14); --accenttekst:#046b6a;
+    --schaduw:0 6px 20px rgba(7,26,42,.14);
     /* Kaart-UI-schaal: volgt de leesafstand, maar afgetopt op 1.6 zodat de knoppenbalk
        ook op een telefoonscherm op één regel blijft passen. */
     --mui:clamp(1, var(--dist), 1.6);
@@ -58,14 +70,15 @@
     padding:calc(var(--safe-t) + 7px) 12px 7px;background:linear-gradient(180deg,var(--state2),transparent);
     transition:background .5s ease;flex:0 0 auto}
   .brand{font-weight:800;font-size:15px;letter-spacing:.3px;display:flex;align-items:center;gap:7px}
-  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(0,208,255,.2)}
+  .brand .merk{width:calc(23px * var(--tui));height:calc(23px * var(--tui));flex:0 0 auto;color:var(--fg)}
+  .brand{letter-spacing:1.4px}
   .htools{display:flex;align-items:center;gap:6px}
   .gps{font-size:11px;color:var(--fg);opacity:.92;display:flex;align-items:center;gap:5px}
-  .gdot{width:9px;height:9px;border-radius:50%;background:#ffcc00}
-  .gdot.good{background:#7bf57b}.gdot.none{background:#ff6b6b}
-  .iconbtn{background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:10px;
+  .gdot{width:9px;height:9px;border-radius:50%;background:var(--warn)}
+  .gdot.good{background:var(--ok)}.gdot.none{background:var(--alert)}
+  .iconbtn{background:var(--vlak);border:1px solid var(--line);border-radius:10px;
     padding:7px 9px;font-size:13px;font-weight:700}
-  .iconbtn.on{background:var(--accent);color:#00222c;border-color:var(--accent)}
+  .iconbtn.on{background:var(--accent);color:var(--opAccent);border-color:var(--accent)}
 
   main{flex:1 1 auto;position:relative;overflow:hidden}
   .view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;
@@ -91,14 +104,14 @@
   .bc-label{font-size:calc(clamp(.65rem,2vmin,1rem) * clamp(1,var(--dist),1.5));letter-spacing:2px;
     text-transform:uppercase;color:var(--muted);font-weight:800}
   .bc-num{font-size:clamp(3.4rem,calc(15vmin * var(--dist)),9rem);font-weight:900;line-height:.9;
-    letter-spacing:-2px;color:var(--accent);text-shadow:0 0 8px rgba(0,0,0,.6);font-variant-numeric:tabular-nums;
+    letter-spacing:-2px;color:var(--accent);font-variant-numeric:tabular-nums;
     margin:2px 0}
   .bc-num small{font-size:.2em;vertical-align:.85em;color:var(--muted);letter-spacing:0;font-weight:800}
   .bc-post{font-size:clamp(1.1rem,calc(4.4vmin * var(--dist)),3.5rem);font-weight:800;color:var(--fg);line-height:1.08}
   .bc-reason{font-size:calc(clamp(.75rem,2.2vmin,1rem) * clamp(1,var(--dist),1.35));color:var(--muted);
     margin-top:6px;line-height:1.3}
   .bc-dist{margin-top:9px;font-size:calc(clamp(.9rem,3vmin,1.4rem) * clamp(1,var(--dist),1.4));font-weight:800;color:var(--fg);
-    background:rgba(255,255,255,.10);display:inline-block;padding:5px 14px;border-radius:999px}
+    background:var(--glaslijn);display:inline-block;padding:5px 14px;border-radius:999px}
   .btn-ack{margin-top:11px;display:none;width:100%;padding:14px;border:0;border-radius:14px;
     background:#fff;color:var(--alert2);font-weight:900;font-size:calc(clamp(1rem,3vmin,1.3rem) * clamp(1,var(--dist),1.2))}
   .big-channel.needsack .btn-ack{display:block}
@@ -112,7 +125,7 @@
     font-variant-numeric:tabular-nums}
   .tile .v small{font-size:.5em;color:var(--muted);font-weight:700}
   .tile .tnote{font-size:calc(clamp(.55rem,1.5vmin,.75rem) * clamp(1,var(--dist),1.2));color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tile.warn{border-color:var(--warn)}.tile.danger{border-color:var(--alert);background:#2a1414}
+  .tile.warn{border-color:var(--warn)}.tile.danger{border-color:var(--alert);background:var(--alert3)}
   /* diepte uit het regionale model i.p.v. officiële lodingen — zichtbaar minder hard */
   .tile.model .tnote{color:var(--warn)}
 
@@ -123,7 +136,7 @@
   .next .t .a{font-weight:800;font-size:calc(clamp(.85rem,2.4vmin,1.1rem) * clamp(1,var(--dist),1.3));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .next .t .b{font-size:calc(clamp(.7rem,1.9vmin,.9rem) * clamp(1,var(--dist),1.2));color:var(--muted);margin-top:1px}
   .next .ch{font-weight:900;font-size:calc(clamp(1.1rem,3.4vmin,1.6rem) * clamp(1,var(--dist),1.35));
-    background:rgba(0,208,255,.16);color:#bfeeff;border-radius:12px;padding:5px 12px;min-width:52px;text-align:center}
+    background:var(--accentzacht);color:var(--accenttekst);border-radius:12px;padding:5px 12px;min-width:52px;text-align:center}
 
   .coskip{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
   .coskip .k{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:800}
@@ -131,7 +144,7 @@
   .coskip .s{font-size:12px;color:var(--muted);margin-top:2px}
 
   .startrow{display:flex;gap:8px;margin-top:8px}
-  .start-btn{flex:1;padding:14px;border:0;border-radius:14px;background:var(--accent);color:#00222c;
+  .start-btn{flex:1;padding:14px;border:0;border-radius:14px;background:var(--accent);color:var(--opAccent);
     font-size:calc(clamp(1rem,3vmin,1.2rem) * clamp(1,var(--dist),1.2));font-weight:800}
   .start-btn.secondary{background:var(--panel);border:1px solid var(--line);color:var(--fg)}
   .hint{color:var(--muted);font-size:12px;text-align:center;margin:8px 4px 2px;line-height:1.4}
@@ -145,7 +158,7 @@
   /* De zoomregelaar staat onderin rechts (23px vanaf de rand + 2 knoppen); 🎯 moet daar ruim boven blijven */
   .maptools{position:absolute;right:10px;bottom:calc(34px + 72px * var(--mui));z-index:600;display:flex;flex-direction:column;gap:8px}
   .maptools button{width:calc(46px * var(--mui));height:calc(46px * var(--mui));border-radius:calc(14px * var(--mui));
-    border:1px solid var(--line);background:rgba(10,22,34,.92);color:#fff;font-size:calc(20px * var(--mui));font-weight:800}
+    border:1px solid var(--line);background:var(--glas);color:#fff;font-size:calc(20px * var(--mui));font-weight:800}
   .leaflet-control-zoom a{width:calc(34px * var(--mui))!important;height:calc(34px * var(--mui))!important;
     line-height:calc(32px * var(--mui))!important;font-size:calc(20px * var(--mui))!important}
   /* Alles linksonder in één kolom: routebalk bovenop, daaronder de kaartkiezer met zijn
@@ -155,25 +168,25 @@
     gap:6px;align-items:flex-start;max-width:calc(100% - 30px - 34px * var(--mui))}
   .layerpick{display:flex;gap:6px;align-items:stretch;flex-wrap:wrap}
   .ovbtns{display:flex;gap:6px;flex-wrap:wrap}
-  .layerpick select{background:rgba(10,22,34,.94);color:var(--fg);border:1px solid var(--line);border-radius:10px;
+  .layerpick select{background:var(--glas);color:var(--fg);border:1px solid var(--line);border-radius:10px;
     padding:calc(9px * var(--mui)) calc(10px * var(--mui));font-size:calc(14px * var(--mui))}
-  .seabtn{background:rgba(10,22,34,.94);color:var(--muted);border:1px solid var(--line);border-radius:10px;
+  .seabtn{background:var(--glas);color:var(--muted);border:1px solid var(--line);border-radius:10px;
     padding:calc(9px * var(--mui)) calc(12px * var(--mui));font-size:calc(13.5px * var(--mui));font-weight:700;white-space:nowrap}
-  .seabtn.on{background:var(--accent);color:#00222c;border-color:var(--accent)}
+  .seabtn.on{background:var(--accent);color:var(--opAccent);border-color:var(--accent)}
   .depth-label-wrap{background:transparent!important;border:0!important;width:auto!important;height:auto!important}
   .depth-map-label{display:inline-block;transform:translate(-50%,-50%);white-space:nowrap;border-radius:7px;
-    padding:3px 6px;background:rgba(0,26,34,.94);border:2px solid #00d0ff;color:#dffaff;
-    font-size:calc(11px * var(--mui));font-weight:900;line-height:1.1;box-shadow:0 1px 5px rgba(0,0,0,.75)}
-  .depth-map-label.draft{background:rgba(42,25,0,.95);border-color:#ffb84d;color:#fff1cf}
+    padding:3px 6px;background:var(--glas);border:2px solid var(--accent);color:var(--accenttekst);
+    font-size:calc(11px * var(--mui));font-weight:900;line-height:1.1;box-shadow:0 1px 4px rgba(7,26,42,.20)}
+  .depth-map-label.draft{background:var(--warn3);border-color:var(--warn);color:var(--warn2)}
   /* Vooruitblik-balk: wijkt uit voor de simulatiebadge en schuift onder een openstaande toast door */
   .predbar{position:absolute;top:calc(var(--safe-t) + 8px);left:10px;right:10px;z-index:600;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;
     transform:translateY(var(--toast-push,0px));transition:transform .3s cubic-bezier(.2,.9,.3,1)}
   body.sim .predbar{top:calc(var(--safe-t) + 6px + 30px * var(--mui))}
-  .predbtn{background:rgba(10,22,34,.92);color:var(--muted);border:1px solid var(--line);border-radius:999px;
+  .predbtn{background:var(--glas);color:var(--muted);border:1px solid var(--line);border-radius:999px;
     display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;
     min-height:calc(44px * var(--mui));padding:0 calc(13px * var(--mui));font-size:calc(13.5px * var(--mui));font-weight:700}
-  .predbtn.on{background:var(--accent);color:#00222c;border-color:var(--accent)}
-  .predbadge{background:rgba(10,22,34,.9);color:#bfeeff;border:1px solid var(--line);
+  .predbtn.on{background:var(--accent);color:var(--opAccent);border-color:var(--accent)}
+  .predbadge{background:var(--glas);color:var(--accenttekst);border:1px solid var(--line);
     border-radius:calc(14px * var(--mui));max-width:100%;
     padding:calc(5px * var(--mui)) calc(11px * var(--mui));font-size:calc(11.5px * var(--mui));font-weight:700;display:none;line-height:1.35}
   .leaflet-control-attribution{font-size:9px}
@@ -187,9 +200,9 @@
    * Waar Safari/oudere Android geen backdrop-filter kan, valt hij terug op de
    * dekkende achtergrondkleur - dat is de reden dat de alpha op .82 staat en niet
    * lager: ook zonder blur moet de tekst leesbaar blijven.                      */
-  .ijs{background:rgba(8,18,28,.82);border:1px solid rgba(255,255,255,.10);
+  .ijs{background:var(--glas);border:1px solid var(--glasrand);
     backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
-    box-shadow:0 10px 30px rgba(0,0,0,.30)}
+    box-shadow:var(--schaduw)}
 
 /* Bovenpaneel: kanaal + object, en - alléén met een route - de drie routecijfers.
    * Een plotter geeft de kaart de ruimte; dit paneel is een strook met cijfers, geen
@@ -207,7 +220,7 @@
   .mc-post{color:var(--fg);font-size:calc(13px * var(--mui));font-weight:700;flex:1;min-width:0;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .mc-dist{color:var(--muted);font-size:calc(11px * var(--mui));font-weight:700;white-space:nowrap}
-  .mc-sep{height:1px;background:rgba(255,255,255,.12);margin:calc(6px * var(--mui)) 0 calc(5px * var(--mui))}
+  .mc-sep{height:1px;background:var(--glaslijn);margin:calc(6px * var(--mui)) 0 calc(5px * var(--mui))}
   .mc-met{display:flex;align-items:center}
   .mc-met > div{flex:1;display:flex;align-items:center;justify-content:center;
     gap:calc(5px * var(--mui));min-width:0}
@@ -234,18 +247,18 @@
   .railbtn.on{color:var(--accent)}
   .railbtn svg{width:calc(21px * var(--mui));height:calc(21px * var(--mui));fill:none;stroke:currentColor;
     stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-  .railsep{width:calc(26px * var(--mui));height:1px;background:rgba(255,255,255,.12)}
+  .railsep{width:calc(26px * var(--mui));height:1px;background:var(--glaslijn)}
 
   /* Lagen-popover */
   .layerpop{position:absolute;right:calc(64px * var(--mui));top:calc(var(--safe-t) + 20px + var(--kaartkop, 96px));z-index:601;
     width:calc(214px * var(--mui));max-width:calc(100vw - 90px * var(--mui));
     border-radius:calc(16px * var(--mui));padding:calc(11px * var(--mui)) calc(13px * var(--mui));display:none}
   .layerpop.show{display:block}
-  .lp-kop{color:#6f88a5;font-size:calc(10px * var(--mui));font-weight:700;letter-spacing:1.2px;
+  .lp-kop{color:var(--kopje);font-size:calc(10px * var(--mui));font-weight:700;letter-spacing:1.2px;
     padding-bottom:calc(6px * var(--mui))}
   .lp-row{display:flex;align-items:center;gap:calc(9px * var(--mui));width:100%;background:none;border:0;
     color:var(--muted);font-size:calc(13px * var(--mui));font-weight:600;padding:calc(7px * var(--mui)) 0;text-align:left}
-  .lp-row.on{color:#dffaff}
+  .lp-row.on{color:var(--accenttekst)}
   .lp-row svg{width:calc(18px * var(--mui));height:calc(18px * var(--mui));fill:none;stroke:currentColor;
     stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
   .lp-row .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -253,14 +266,14 @@
     background:var(--line);position:relative;flex:0 0 auto}
   .lp-row.on .lp-sw{background:var(--accent)}
   .lp-sw i{position:absolute;top:calc(2.5px * var(--mui));left:calc(2.5px * var(--mui));
-    width:calc(14px * var(--mui));height:calc(14px * var(--mui));border-radius:50%;background:#0a1622;
+    width:calc(14px * var(--mui));height:calc(14px * var(--mui));border-radius:50%;background:var(--panel);
     transition:left .15s ease}
-  .lp-row.on .lp-sw i{left:calc(15.5px * var(--mui));background:#00222c}
-  .lp-sep{height:1px;background:rgba(255,255,255,.12);margin:calc(8px * var(--mui)) 0}
-  .lp-sub{color:#6f88a5;font-size:calc(10px * var(--mui));font-weight:700;letter-spacing:1.2px;
+  .lp-row.on .lp-sw i{left:calc(15.5px * var(--mui));background:var(--opAccent)}
+  .lp-sep{height:1px;background:var(--glaslijn);margin:calc(8px * var(--mui)) 0}
+  .lp-sub{color:var(--kopje);font-size:calc(10px * var(--mui));font-weight:700;letter-spacing:1.2px;
     padding:calc(2px * var(--mui)) 0 calc(6px * var(--mui))}
-  .layerpop select{width:100%;background:rgba(255,255,255,.07);color:var(--fg);
-    border:1px solid rgba(255,255,255,.12);border-radius:calc(10px * var(--mui));
+  .layerpop select{width:100%;background:var(--vlak);color:var(--fg);
+    border:1px solid var(--glaslijn);border-radius:calc(10px * var(--mui));
     padding:calc(7px * var(--mui)) calc(9px * var(--mui));font-size:calc(13px * var(--mui))}
 
 /* Vraagpaneel onderaan: een keuze die over de kaart gaat, hoort bij de kaart. Dus geen
@@ -272,7 +285,7 @@
   .mapask.show{display:block}
   body.vraagt .mapwind{display:none}          /* niet stapelen: één paneel onderaan tegelijk */
   .ma-kop{display:flex;align-items:center;gap:calc(8px * var(--mui));
-    color:#6f88a5;font-size:calc(10px * var(--mui));font-weight:700;letter-spacing:1.2px;
+    color:var(--kopje);font-size:calc(10px * var(--mui));font-weight:700;letter-spacing:1.2px;
     padding-bottom:calc(4px * var(--mui))}
   .ma-kop .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ma-x{background:none;border:0;padding:calc(4px * var(--mui));margin:calc(-4px * var(--mui));
@@ -281,11 +294,11 @@
     stroke-width:2;stroke-linecap:round}
   .ma-row{display:flex;align-items:center;gap:calc(11px * var(--mui));width:100%;background:none;border:0;
     color:var(--muted);padding:calc(9px * var(--mui)) 0;text-align:left}
-  .ma-row + .ma-row{border-top:1px solid rgba(255,255,255,.10)}
+  .ma-row + .ma-row{border-top:1px solid var(--glaslijn)}
   .ma-row .ic,.ma-wacht .ic{width:calc(20px * var(--mui));height:calc(20px * var(--mui));fill:none;stroke:var(--accent);
     stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
   .ma-tx{flex:1;min-width:0}
-  .ma-tx .t{display:block;color:#dffaff;font-size:calc(13.5px * var(--mui));font-weight:700;
+  .ma-tx .t{display:block;color:var(--accenttekst);font-size:calc(13.5px * var(--mui));font-weight:700;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ma-tx .s{display:block;color:var(--muted);font-size:calc(11px * var(--mui));font-weight:600;padding-top:1px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -332,7 +345,7 @@
     stroke-width:2;stroke-linecap:round}
   .mt-scale{height:calc(24px * var(--mui));display:flex;align-items:center;justify-content:center;
     color:var(--muted);font-size:calc(10px * var(--mui));font-weight:700;white-space:nowrap;
-    border-top:1px solid rgba(255,255,255,.10);border-bottom:1px solid rgba(255,255,255,.10)}
+    border-top:1px solid var(--glaslijn);border-bottom:1px solid var(--glaslijn)}
 
   /* Onderbalk-iconen zijn nu SVG in plaats van emoji */
   nav button .ni svg{width:calc(21px * var(--mui));height:calc(21px * var(--mui));fill:none;stroke:currentColor;
@@ -362,7 +375,13 @@
   /* ---------- Nachtmodus (rood/gedimd, spaart nachtzicht) ---------- */
   body.night{--bg:#000;--bg2:#160303;--panel:#1a0505;--panel2:#210707;--line:#3a0d0d;
     --fg:#ffcac4;--muted:#c98a86;--accent:#ff6a4d;--accent2:#5c1c14;
-    --ok:#7a2a17;--ok2:#4a1a0e;--warn:#8a5a12;--warn2:#5a3a0c;--alert:#c62828;--alert2:#7a1410}
+    --ok:#7a2a17;--ok2:#4a1a0e;--ok3:#2a0e08;--warn:#8a5a12;--warn2:#5a3a0c;--warn3:#2e1d05;
+    --alert:#c62828;--alert2:#ffb3a6;--alert3:#3a0d0d;
+    /* De paneel- en hulpkleuren gaan in nachtmodus in één keer mee terug naar donker. */
+    --opAccent:#1a0505; --glas:rgba(22,3,3,.88); --glasrand:rgba(255,170,150,.16);
+    --glaslijn:rgba(255,170,150,.16); --vlak:rgba(255,170,150,.08); --kopje:#c98a86;
+    --accentzacht:rgba(255,106,77,.18); --accenttekst:#ffb3a6;
+    --schaduw:0 6px 20px rgba(0,0,0,.55)}
   body.night .bc-num,body.night .safety-big .c{color:#ff8f77}
   body.night img,body.night #map{filter:brightness(.62) sepia(.35) hue-rotate(-25deg) saturate(1.25)}
   body.night .start-btn{background:#7a2a17;color:#ffd}
@@ -376,22 +395,22 @@
   .row .name{flex:1;min-width:0}
   .row .name .a{font-weight:700;font-size:15px}
   .row .name .b{font-size:12px;color:var(--muted);margin-top:1px}
-  .row .chan{font-weight:900;font-size:20px;color:#bfeeff;background:rgba(0,208,255,.14);border-radius:10px;padding:5px 12px;min-width:48px;text-align:center}
-  .row .chan.red{color:#ffd4d4;background:rgba(226,59,59,.22)}
-  .tag{font-size:10px;font-weight:800;color:#ffce6b;border:1px solid #6b5220;border-radius:6px;padding:1px 5px;margin-left:6px}
+  .row .chan{font-weight:900;font-size:20px;color:var(--accenttekst);background:var(--accentzacht);border-radius:10px;padding:5px 12px;min-width:48px;text-align:center}
+  .row .chan.red{color:var(--alert2);background:var(--alert3)}
+  .tag{font-size:10px;font-weight:800;color:var(--warn2);border:1px solid var(--warn);border-radius:6px;padding:1px 5px;margin-left:6px}
   .emg{background:linear-gradient(180deg,#3a1414,#280f0f);border:1px solid #6b2323}
   .emg .row{border-top-color:#5a2020}
 
   /* ---------- Veiligheid ---------- */
   .safety-big{background:linear-gradient(180deg,#3a1414,#220c0c);border:1px solid #6b2323;border-radius:18px;
     padding:16px;text-align:center;margin-bottom:12px}
-  .safety-big .c{font-size:calc(clamp(2.4rem,10vmin,4rem) * clamp(1,var(--dist),1.3));font-weight:900;color:#ff8f8f;line-height:1}
-  .safety-big .l{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#e8a3a3;font-weight:800}
+  .safety-big .c{font-size:calc(clamp(2.4rem,10vmin,4rem) * clamp(1,var(--dist),1.3));font-weight:900;color:var(--alert);line-height:1}
+  .safety-big .l{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--alert2);font-weight:800}
   .bigbtn{width:100%;padding:15px;border:0;border-radius:14px;font-weight:800;font-size:16px;margin-top:10px}
-  .bigbtn.red{background:#c62828;color:#fff}.bigbtn.blue{background:var(--accent);color:#00222c}
+  .bigbtn.red{background:#c62828;color:#fff}.bigbtn.blue{background:var(--accent);color:var(--opAccent)}
   .bigbtn.grey{background:var(--panel2);border:1px solid var(--line);color:var(--fg)}
   .anchorstat{font-size:22px;font-weight:900;margin-top:4px}
-  .anchorstat.ok{color:#7bf57b}.anchorstat.warn{color:#ffce6b}.anchorstat.danger{color:#ff8f8f}
+  .anchorstat.ok{color:var(--ok)}.anchorstat.warn{color:var(--warn2)}.anchorstat.danger{color:var(--alert)}
 
   /* ---------- Instellingen ---------- */
   .set{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 14px;border-top:1px solid var(--line)}
@@ -400,23 +419,23 @@
   .set .sub{font-size:12px;color:var(--muted);margin-top:2px}
   .switch{position:relative;width:52px;height:30px;flex:0 0 auto}
   .switch input{opacity:0;width:0;height:0}
-  .slider{position:absolute;inset:0;background:#274b70;border-radius:999px;transition:.2s}
+  .slider{position:absolute;inset:0;background:#c3ced8;border-radius:999px;transition:.2s}
   .slider::before{content:"";position:absolute;height:24px;width:24px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
   .switch input:checked + .slider{background:var(--accent)}
   .switch input:checked + .slider::before{transform:translateX(22px)}
   input[type=range]{width:100%;accent-color:var(--accent)}
   select,.filebtn{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-size:15px;min-height:44px}
-  .rangeval{font-weight:800;color:#bfeeff;min-width:74px;text-align:right}
+  .rangeval{font-weight:800;color:var(--accenttekst);min-width:74px;text-align:right}
   .seg{display:flex;background:#0b1a28;border:1px solid var(--line);border-radius:12px;overflow:hidden}
   .seg button{flex:1;background:transparent;border:0;color:var(--muted);padding:9px 6px;font-weight:800;font-size:13px;min-height:44px}
-  .seg button.on{background:var(--accent);color:#00222c}
+  .seg button.on{background:var(--accent);color:var(--opAccent)}
 
   /* ---------- Bottom nav ---------- */
-  nav{flex:0 0 auto;display:flex;background:#05101c;border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
+  nav{flex:0 0 auto;display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
   nav button{flex:1;background:none;border:0;color:var(--muted);padding:8px 2px 7px;font-size:10px;font-weight:700;
     display:flex;flex-direction:column;align-items:center;gap:3px}
   nav button .ni{font-size:19px;line-height:1}
-  nav button.active{color:#fff}
+  nav button.active{color:var(--accent)}
   nav button.active .ni{filter:drop-shadow(0 0 6px rgba(0,208,255,.7))}
   body.cockpit-hide nav{display:none} /* auto-hide in cockpit-fullscreen */
 
@@ -450,8 +469,8 @@
   .gb-t{display:block;font-size:13.5px;font-weight:800;color:var(--fg)}
   .gb-s{display:block;font-size:11.5px;color:var(--muted);line-height:1.35}
   .gb-btn{flex:0 0 auto;border:0;border-radius:11px;padding:10px 15px;font-size:14px;font-weight:800;
-    background:var(--accent);color:#00222c;min-height:44px}
-  .diag{margin:0 14px 12px;padding:10px;background:#0a1622;border:1px solid var(--line);
+    background:var(--accent);color:var(--opAccent);min-height:44px}
+  .diag{margin:0 14px 12px;padding:10px;background:var(--panel);border:1px solid var(--line);
     border-radius:10px;color:#9db4cf;font-size:11.5px;line-height:1.55;white-space:pre-wrap;
     word-break:break-word;font-family:ui-monospace,Menlo,Consolas,monospace}
 
@@ -462,7 +481,7 @@
   .modal h3{margin:0 0 8px;font-size:20px}
   .modal p{color:var(--muted);font-size:14px;line-height:1.5;margin:8px 0}
   .modal ul,.modal ol{color:var(--muted);font-size:14px;line-height:1.6;padding-left:20px;margin:8px 0}
-  .modal .ok{width:100%;margin-top:14px;padding:14px;border:0;border-radius:14px;background:var(--accent);color:#00222c;font-weight:800;font-size:16px}
+  .modal .ok{width:100%;margin-top:14px;padding:14px;border:0;border-radius:14px;background:var(--accent);color:var(--opAccent);font-weight:800;font-size:16px}
   .maystep{color:var(--fg)}
 
   /* ============================================================
@@ -471,10 +490,10 @@
      achteraan zodat het de bovenstaande maten overschrijft.
      ============================================================ */
   /* Onderste navigatiebalk */
-  nav button{font-size:calc(13px * var(--nui));font-weight:800;
-    padding:calc(9px * var(--nui)) 2px calc(8px * var(--nui));gap:calc(4px * var(--nui))}
-  nav button .ni{font-size:calc(27px * var(--nui))}
-  nav button .ni svg{width:calc(21px * var(--nui));height:calc(21px * var(--nui))}
+  nav button{font-size:calc(11px * var(--nui));font-weight:700;
+    padding:calc(6px * var(--nui)) 2px calc(5px * var(--nui));gap:calc(3px * var(--nui))}
+  nav button .ni{font-size:calc(21px * var(--nui))}
+  nav button .ni svg{width:calc(19px * var(--nui));height:calc(19px * var(--nui));stroke-width:1.6}
   /* Koptekst */
   .brand{font-size:calc(17px * var(--tui))}
   .gps{font-size:calc(13px * var(--tui))}
@@ -516,7 +535,7 @@
   @media (max-width:759px){
     body.opkaart header{padding-top:calc(var(--safe-t) + 3px);padding-bottom:3px}
     body.opkaart .brand{font-size:14px}
-    body.opkaart .brand .dot{width:8px;height:8px;box-shadow:0 0 0 2px rgba(0,208,255,.2)}
+    body.opkaart .brand .dot{width:8px;height:8px;box-shadow:0 0 0 2px var(--accentzacht)}
     body.opkaart .iconbtn{padding:6px 9px;font-size:14px}
   }
   @media (max-width:599px){
@@ -543,7 +562,17 @@
 <body>
 <div id="app">
   <header id="topbar">
-    <div class="brand"><span class="dot"></span> MarifoonPilot</div>
+    <div class="brand">
+      <svg class="merk" viewBox="0 0 48 48" aria-hidden="true">
+        <path d="M30.6 8.4 A17 17 0 1 0 39.6 21.8" fill="none" stroke="currentColor" stroke-width="3.8" stroke-linecap="round"/>
+        <path d="M33.2 14.8 L13.4 24.8 L20.4 27.6 Z" fill="#00B7B5"/>
+        <path d="M33.2 14.8 L23.2 34.6 L20.4 27.6 Z" fill="currentColor"/>
+        <g transform="rotate(-45 35.4 12.6)">
+          <path d="M39.6 8.6 a5.9 5.9 0 0 1 0 8" fill="none" stroke="#00B7B5" stroke-width="2.7" stroke-linecap="round"/>
+          <path d="M43.4 4.8 a11.4 11.4 0 0 1 0 15.6" fill="none" stroke="#00B7B5" stroke-width="2.7" stroke-linecap="round"/>
+        </g>
+        <circle cx="35.4" cy="12.6" r="3.2" fill="#FFB020"/>
+      </svg>NAVIQ</div>
     <div class="htools">
       <div class="gps"><span class="gdot none" id="gdot"></span><span id="gpsInfo">GPS start…</span></div>
       <button class="iconbtn" id="btnFs" title="Volledig scherm">⛶</button>
@@ -806,7 +835,7 @@
         </div>
       </div>
 
-      <div class="hint">Versie 5.2.1 · GPS start vanzelf · locatie-diagnose · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
+      <div class="hint">Versie 5.3.0 · nieuwe naam en huisstijl · GPS start vanzelf · locatie-diagnose · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
     </section>
   </main>
 
@@ -831,12 +860,12 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <!-- ?v= meeverhogen bij elke release: garandeert dat browsers de nieuwe JS pakken
      en niet een oude versie uit hun HTTP-cache blijven serveren. -->
-<script src="config.js?v=5.2.1"></script>
-<script src="data.js?v=5.2.1"></script>
-<script src="vhf-points.js?v=5.2.1"></script>
-<script src="fairway-depths.js?v=5.2.1"></script>
-<script src="obstacles.js?v=5.2.1"></script>
-<script src="stations.js?v=5.2.1"></script>
-<script src="app.js?v=5.2.1"></script>
+<script src="config.js?v=5.3.0"></script>
+<script src="data.js?v=5.3.0"></script>
+<script src="vhf-points.js?v=5.3.0"></script>
+<script src="fairway-depths.js?v=5.3.0"></script>
+<script src="obstacles.js?v=5.3.0"></script>
+<script src="stations.js?v=5.3.0"></script>
+<script src="app.js?v=5.3.0"></script>
 </body>
 </html>

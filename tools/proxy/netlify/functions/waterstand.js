@@ -1,4 +1,4 @@
-/* Waterstand-proxy voor MarifoonPilot — Netlify Functions
+/* Waterstand-proxy voor NAVIQ — Netlify Functions
  * ---------------------------------------------------------------
  * Waarom dit nodig is: de Rijkswaterstaat Waterinfo-API stuurt geen CORS-headers, dus een
  * browser weigert het antwoord. Server-naar-server mag wel. Deze functie haalt de data op
@@ -23,7 +23,7 @@ exports.handler = async function () {
   };
   try {
     const res = await fetch(RWS, {
-      headers: { "User-Agent": "MarifoonPilot/2.9 (+https://github.com/)", "Accept": "application/json" }
+      headers: { "User-Agent": "NAVIQ/2.9 (+https://github.com/)", "Accept": "application/json" }
     });
     if (!res.ok) {
       return { statusCode: 502, headers, body: JSON.stringify({ error: "RWS gaf status " + res.status }) };

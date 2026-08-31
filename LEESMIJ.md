@@ -1,4 +1,4 @@
-# MarifoonPilot v2 ⚓📻
+# NAVIQ v2 ⚓📻
 
 Een GPS-vaarassistent die **automatisch het juiste marifoonkanaal** adviseert op het IJsselmeer,
 Markermeer en de Waddenzee — op basis van je **positie én vaarrichting**. Werkt als **PWA** op
@@ -359,7 +359,7 @@ Verwacht formaat — een `FeatureCollection` van `Point`-features met diepte in 
 ```
 
 Let op: coördinaten in GeoJSON-volgorde `[lengtegraad, breedtegraad]`. Gebruik uitsluitend
-**officiële** dieptedata (bv. van Rijkswaterstaat) — MarifoonPilot toont alleen wat je zelf laadt.
+**officiële** dieptedata (bv. van Rijkswaterstaat) — NAVIQ toont alleen wat je zelf laadt.
 
 ---
 
@@ -373,7 +373,7 @@ Alles staat als platte data in `data.js`: `AREAS` (gebieden), `POINTS` (sluizen/
 
 ## ⚠️ Belangrijk — veiligheid
 
-MarifoonPilot is een **hulpmiddel, geen vervanging** voor je marifoon of officiële vaarinformatie.
+NAVIQ is een **hulpmiddel, geen vervanging** voor je marifoon of officiële vaarinformatie.
 
 - Kanalen en bedieningstijden **kunnen wijzigen**. Controleer altijd de **Wateralmanak deel 1 & 2**
   en **vaarweginformatie.nl**.

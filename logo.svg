@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="NAVIQ">
+  <!-- Ring met een opening rechtsboven, waar het signaal uit komt. Ring plus naaldstaart
+       vormen samen de Q uit het woordmerk. -->
+  <path d="M30.6 8.4 A17 17 0 1 0 39.6 21.8"
+        fill="none" stroke="currentColor" stroke-width="3.8" stroke-linecap="round"/>
+  <!-- Navigatiepijl naar de bron rechtsboven: teal blad, effen tegenblad, ingesneden staart -->
+  <path d="M33.2 14.8 L13.4 24.8 L20.4 27.6 Z" fill="#00B7B5"/>
+  <path d="M33.2 14.8 L23.2 34.6 L20.4 27.6 Z" fill="currentColor"/>
+  <!-- Baken op de punt, met twee bogen die met de pijl mee wijzen -->
+  <g transform="rotate(-45 35.4 12.6)">
+    <path d="M39.6 8.6 a5.9 5.9 0 0 1 0 8" fill="none" stroke="#00B7B5" stroke-width="2.7" stroke-linecap="round"/>
+    <path d="M43.4 4.8 a11.4 11.4 0 0 1 0 15.6" fill="none" stroke="#00B7B5" stroke-width="2.7" stroke-linecap="round"/>
+  </g>
+  <circle cx="35.4" cy="12.6" r="3.2" fill="#FFB020"/>
+</svg>

@@ -1,4 +1,4 @@
-/* AIS-proxy voor MarifoonPilot — Netlify Functions
+/* AIS-proxy voor NAVIQ — Netlify Functions
  * ---------------------------------------------------------------
  * Waarom dit nodig is: de EuRIS-trackdienst antwoordt prima zonder token, maar stuurt
  * geen CORS-headers — niet op de preflight en niet op de GET. Een browser weigert het
@@ -83,7 +83,7 @@ async function haalAlles(bbox) {
       + "&maxLon=" + bbox.maxLon + "&maxLat=" + bbox.maxLat
       + "&pageSize=100&skip=" + (p * 100);
     const res = await fetch(url, {
-      headers: { "User-Agent": "MarifoonPilot/4.9", "Accept": "application/json" }
+      headers: { "User-Agent": "NAVIQ/4.9", "Accept": "application/json" }
     });
     if (!res.ok) throw new Error("EuRIS gaf status " + res.status);
     const rij = await res.json();

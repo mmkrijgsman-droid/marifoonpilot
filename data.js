@@ -1,4 +1,4 @@
-/* MarifoonPilot v2 – handmatig gecontroleerde vaargebieden & regionale kanalen
+/* NAVIQ v2 – handmatig gecontroleerde vaargebieden & regionale kanalen
  * Deze aanvullende kanalen zijn geverifieerd (juli 2026) via Rijkswaterstaat
  * Vaarweginformatie, waterkaart.net, varendoejesamen.nl, Nautin en havenautoriteiten.
  * De landelijke officiële RWS-meldpunten staan gegenereerd in vhf-points.js.

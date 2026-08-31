@@ -1,4 +1,4 @@
-/* MarifoonPilot - landelijke vaarwegdiepten (GEGENEREERD, niet handmatig aanpassen)
+/* NAVIQ - landelijke vaarwegdiepten (GEGENEREERD, niet handmatig aanpassen)
  * Bron: Rijkswaterstaat FIS/VNDS, collecties vaarwegdiepte, max_toegestane_afmeting en route.
  * Opgehaald: 2026-08-21. 1332 bodem-/dieptetrajecten; 602 max.-diepgangstrajecten.
  * De getekende vaarwegdiepte is een niveau/range t.o.v. het vermelde referentievlak;

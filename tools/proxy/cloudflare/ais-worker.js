@@ -1,4 +1,4 @@
-/* AIS-proxy voor MarifoonPilot — Cloudflare Workers
+/* AIS-proxy voor NAVIQ — Cloudflare Workers
  * ---------------------------------------------------------------
  * Zelfde doel en zelfde regels als de Netlify-variant (zie ais.js daar voor het waarom):
  * de EuRIS-trackdienst antwoordt zonder token maar zonder CORS-headers. Er is hier geen
@@ -87,7 +87,7 @@ export default {
           + "&maxLon=" + bbox.maxLon + "&maxLat=" + bbox.maxLat
           + "&pageSize=100&skip=" + (i * 100);
         const up = await fetch(url, {
-          headers: { "User-Agent": "MarifoonPilot/4.9", "Accept": "application/json" }
+          headers: { "User-Agent": "NAVIQ/4.9", "Accept": "application/json" }
         });
         if (!up.ok) throw new Error("EuRIS gaf status " + up.status);
         const rij = await up.json();

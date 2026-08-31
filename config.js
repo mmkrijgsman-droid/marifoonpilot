@@ -1,4 +1,4 @@
-/* MarifoonPilot — kaartlagen, API-sleutels en externe diensten
+/* NAVIQ — kaartlagen, API-sleutels en externe diensten
  * ------------------------------------------------------------------
  * Dit is het enige bestand dat je hoeft aan te passen om over te stappen op een
  * betaalde kaartprovider of om het getij aan te zetten. Zonder sleutels werkt de

@@ -1,4 +1,4 @@
-/* Waterstand-proxy voor MarifoonPilot — Cloudflare Workers
+/* Waterstand-proxy voor NAVIQ — Cloudflare Workers
  * ---------------------------------------------------------------
  * Zelfde doel als de Netlify-variant: de Rijkswaterstaat-API stuurt geen CORS-headers,
  * dus haalt deze Worker de data server-side op en zet ze er wel bij.
@@ -29,7 +29,7 @@ export default {
 
     if (!res) {
       const upstream = await fetch(RWS, {
-        headers: { "User-Agent": "MarifoonPilot/2.9", "Accept": "application/json" },
+        headers: { "User-Agent": "NAVIQ/2.9", "Accept": "application/json" },
         cf: { cacheTtl: 300, cacheEverything: true }
       });
       if (!upstream.ok) {
