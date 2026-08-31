@@ -1,6 +1,21 @@
 /* MarifoonPilot v2 – applicatielogica */
 "use strict";
 
+const APP_VERSIE = "5.2.0";
+
+/* Een fout in de opstart laat de app stil doodgaan: je ziet een scherm dat niets doet en
+ * je hebt geen idee waarom. Daarom vangen we ze op en zetten ze in de diagnose (en, als de
+ * app al staat, in een melding). Bewust bovenaan het bestand: fouten van later in dit
+ * bestand moeten er ook nog in vallen. */
+let jsFout=null;
+window.addEventListener("error",e=>{
+  jsFout=(e.message||"fout")+" @ "+String(e.filename||"?").split("/").pop()+":"+(e.lineno||0);
+  try{ if(typeof showToast==="function") showToast("⚠️","Er ging iets mis in de app",jsFout,{sticky:true,warn:true}); }catch(_){}
+});
+window.addEventListener("unhandledrejection",e=>{
+  const r=e.reason; jsFout="promise: "+((r&&r.message)||r||"?");
+});
+
 /* ---------------- Instellingen ---------------- */
 const DEFAULTS = {
   distMode:null, distFactor:null,        // null = automatisch (per apparaat)
@@ -506,13 +521,40 @@ function beep(freqs=[784,1046]){
  */
 const GPS_OPTS={enableHighAccuracy:true,maximumAge:1500,timeout:15000};
 let gpsTekst="GPS start…", gpsWatchdog=null, gpsPermStatus=null;
+let gpsVraagTimer=null, gpsFout=null, gpsFixen=0, gpsPogingen=0, gpsBalkActie=null;
+/* Een weigering die uit het verzoek zelf komt (foutcode 1) is harder bewijs dan wat de
+ * Permissions-API zegt: onder een blokkade meldt Chrome soms nog gewoon "prompt". Onthouden
+ * dus, anders overschrijft de stiltecontrole hierna de juiste melding. */
+let gpsGeweigerd=false;
+
+/* Een link in WhatsApp, Gmail of Facebook opent niet in Chrome maar in de mini-browser ván
+ * die app (een Android WebView). Die moet de locatievraag doorgeven aan zijn gastheer, en
+ * de meeste doen dat niet — er komt geen vraag en er komt geen positie, zonder één foutje.
+ * Dat is exact het beeld "Android vraagt niks", dus daar moeten we naar kijken. */
+function inAppBrowser(){
+  const ua=navigator.userAgent||"";
+  if(/FBAN|FBAV|FB_IAB/i.test(ua)) return "de browser in Facebook of Messenger";
+  if(/Instagram/i.test(ua)) return "de browser in Instagram";
+  if(/LinkedInApp/i.test(ua)) return "de browser in LinkedIn";
+  if(/MicroMessenger/i.test(ua)) return "de browser in WeChat";
+  if(/Line\//i.test(ua)) return "de browser in LINE";
+  if(/; wv\)/.test(ua)) return "een ingebouwde mini-browser (Android WebView)";
+  return null;
+}
 
 /* Geolocation werkt alleen in een beveiligde context: https, of localhost. Draait de app
  * op http://<lan-ip> of vanaf file://, dan weigert de browser stilletjes — hij vraagt niets
  * en levert niets. Dat is precies het beeld "Android vraagt niet om toestemming", dus
  * benoemen we het in plaats van het als "geen fix" te verpakken. */
+function gpsBruikbaar(){
+  const g=navigator.geolocation;
+  return !!(g && typeof g.watchPosition==="function" && typeof g.getCurrentPosition==="function");
+}
 function gpsBlokkade(){
-  if(!("geolocation" in navigator)) return "Dit apparaat of deze browser heeft geen locatievoorziening.";
+  // Niet "bestaat de eigenschap", maar "kan ik hem gebruiken": sommige ingebouwde browsers
+  // zetten er een lege huls neer, en daar liep de app op stuk in plaats van het te melden.
+  if(!gpsBruikbaar()) return "Deze browser heeft geen bruikbare locatievoorziening. "+
+    "Open de app in Chrome; een mini-browser in een andere app levert vaak niets.";
   // file:// telt in Chrome wél als beveiligde context, maar geeft alsnog geen locatie:
   // er is geen herkomst om de toestemming aan te hangen. Apart benoemen dus.
   if(location.protocol==="file:") return "De app is als los bestand geopend (file://). Browsers geven dan geen locatie. "+
@@ -535,25 +577,98 @@ function toonGpsHerstel(aan,label){
   b.hidden=!aan;
   if(label) b.textContent=label;
 }
+/* De balk onder de koptekst. Alleen zichtbaar als er iets te doen valt, en altijd met één
+ * concrete tik erbij — nooit een mededeling waar de schipper niets mee kan. */
+function toonGpsBalk(soort,titel,sub,knop,actie){
+  const b=$("gpsBar"); if(!b) return;
+  if(!soort){ b.classList.remove("show","err"); gpsBalkActie=null; return; }
+  $("gpsBarT").textContent=titel; $("gpsBarS").textContent=sub;
+  $("gpsBarBtn").textContent=knop; gpsBalkActie=actie;
+  b.classList.toggle("err", soort==="err"); b.classList.add("show");
+  if(map) setTimeout(()=>{ try{ map.invalidateSize(); }catch(_){ } },60);
+}
+/* Vraagt de browser niets uit zichzelf, dan is het aan ons om ernaar te vragen. Chrome mag
+ * een locatieverzoek dat niet uit een tik voortkomt stil afhandelen: geen venster, geen
+ * fout, niets. Na een paar seconden stilte zetten we daarom een echte knop neer — een
+ * verzoek ná een tik krijgt wél een venster. */
+function checkStilleVraag(){
+  if(S.sim || pos || gpsGeweigerd) return;
+  if(gpsPermStatus==="denied"){ meldGeweigerd(); return; }
+  if(gpsPermStatus==="granted") return;       // hij mág al; hij zoekt alleen nog
+  const wv=inAppBrowser();
+  if(wv){
+    toonGpsBalk("err","Deze mini-browser geeft geen locatie",
+      "Je opent de app in "+wv+". Tik op ⋮ → Openen in Chrome.","Wat nu?",gpsHulpModal);
+    return;
+  }
+  toonGpsBalk("warn","De browser heeft nog niets gevraagd",
+    "Tik op Toestaan — een vraag ná een tik wordt niet weggemoffeld.","Toestaan",()=>startGPS(true));
+}
+/* Ook ná een tik stil? Dan blokkeert Chrome de vraag zelf. Dat gebeurt als de vraag eerder
+ * een paar keer is weggetikt: de site komt dan op een zwarte lijst en krijgt nooit meer een
+ * venster te zien. Alleen met de hand aanzetten helpt nog. */
+function checkNaTik(){
+  if(S.sim || pos || gpsGeweigerd) return;
+  if(gpsPermStatus==="granted") return;
+  if(gpsPermStatus==="denied"){ meldGeweigerd(); return; }
+  toonGpsBalk("err","De vraag komt niet in beeld",
+    "De browser houdt hem tegen. Je moet locatie met de hand toestaan.","Wat nu?",gpsHulpModal);
+}
+function gpsHulpModal(){
+  const opBeginscherm=(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)||navigator.standalone===true;
+  openModal(`<h3>Locatie met de hand aanzetten</h3>
+    <p>De browser vraagt niet (meer) om je locatie. Dat komt bijna altijd doordat de vraag
+       eerder is weggetikt: daarna onthoudt hij dat en blijft het stil.</p>
+    ${opBeginscherm
+      ? `<p><b>De app staat op je beginscherm</b><br>Er is dus geen adresbalk. Ga naar
+           <b>Android → Instellingen → Apps → MarifoonPilot → Machtigingen → Locatie → Toestaan</b>.
+           Helpt dat niet, verwijder de app van je beginscherm en zet hem er opnieuw op.</p>`
+      : `<p><b>In Chrome</b><br>Tik op het slotje of ⓘ links in de adresbalk →
+           <b>Machtigingen</b> → <b>Locatie</b> → <b>Toestaan</b>. Staat er <b>Resetten</b>,
+           doe dat: dan komt de vraag terug.</p>`}
+    <p><b>Controleer Android zelf</b><br>Instellingen → Locatie moet aanstaan, en Chrome moet
+       daar bij de apps op Toestaan staan.</p>
+    <p><b>Open je de app vanuit een andere app?</b><br>Een link in WhatsApp of e-mail opent in
+       een mini-browser die nooit om locatie vraagt. Tik op ⋮ → <b>Openen in Chrome</b>.</p>
+    <p>Bij Instellingen → GPS-diagnose staat wat de browser op dit toestel meldt.</p>
+    <button class="ok" onclick="closeModal(); startGPS(true);">Opnieuw proberen</button>`);
+}
+
 function startGPS(doorGebruiker){
   const blok=gpsBlokkade();
   if(blok){
     setGpsTekst("Locatie geblokkeerd");
     showToast("⚠️","Geen locatie mogelijk",blok,{sticky:true,warn:true});
     toonGpsHerstel(true,"Opnieuw proberen");
+    toonGpsBalk("err","Geen locatie mogelijk",blok,"Wat nu?",gpsHulpModal);
+    vulDiagnose();
     return;
   }
   if(doorGebruiker) unlockAudio();
-  toonGpsHerstel(false);
+  gpsGeweigerd=false;
+  toonGpsHerstel(false); toonGpsBalk(null);
+  gpsPogingen++;
   setGpsTekst("Zoekt satellieten…");
-  if(watchId!=null) navigator.geolocation.clearWatch(watchId);
-  watchId=navigator.geolocation.watchPosition(onPos,onErr,GPS_OPTS);
-  // Eén losse vraag ernaast: bij een koude start blijft watchPosition soms minutenlang
-  // stil terwijl er allang een grove netwerkpositie is. Dan staat er tenminste íéts.
-  navigator.geolocation.getCurrentPosition(onPos,()=>{},{enableHighAccuracy:false,timeout:20000,maximumAge:120000});
+  try{
+    if(watchId!=null) navigator.geolocation.clearWatch(watchId);
+    watchId=navigator.geolocation.watchPosition(onPos,onErr,GPS_OPTS);
+    // Eén losse vraag ernaast: bij een koude start blijft watchPosition soms minutenlang
+    // stil terwijl er allang een grove netwerkpositie is. Dan staat er tenminste íéts.
+    navigator.geolocation.getCurrentPosition(onPos,()=>{},{enableHighAccuracy:false,timeout:20000,maximumAge:120000});
+  }catch(e){
+    gpsFout="uitzondering: "+((e&&e.message)||e);
+    setGpsTekst("Locatie geblokkeerd");
+    toonGpsBalk("err","De browser weigert de locatie","Deze browser geeft geen positie door.","Wat nu?",gpsHulpModal);
+    vulDiagnose(); return;
+  }
   volgGpsPermissie();
+  // Blijft het stil, dan is de vráág het probleem, niet de ontvangst. Dat onderscheid maken
+  // we op tijd: 3,5 s zonder antwoord ná een automatisch verzoek, 8 s ná een tik.
+  clearTimeout(gpsVraagTimer);
+  gpsVraagTimer=setTimeout(doorGebruiker?checkNaTik:checkStilleVraag, doorGebruiker?8000:3500);
   clearTimeout(gpsWatchdog);
   gpsWatchdog=setTimeout(()=>{ if(!pos && !S.sim) geenFixHint(); },25000);
+  vulDiagnose();
 }
 function geenFixHint(){
   if(gpsPermStatus==="denied") return;   // daarvoor is er al een duidelijkere melding
@@ -570,14 +685,19 @@ function volgGpsPermissie(){
     const lees=()=>{
       gpsPermStatus=st.state;
       if(st.state==="denied") meldGeweigerd();
-      else if(st.state==="granted"){ toonGpsHerstel(false); if(watchId==null) startGPS(false); }
+      else if(st.state==="granted"){ toonGpsHerstel(false); toonGpsBalk(null); if(watchId==null) startGPS(false); }
+      vulDiagnose();
     };
     lees(); st.onchange=lees;
   }).catch(()=>{});
 }
 function meldGeweigerd(){
+  gpsGeweigerd=true;
+  clearTimeout(gpsVraagTimer); gpsVraagTimer=null;
   setGpsTekst("Locatie geweigerd");
   toonGpsHerstel(true,"Locatie opnieuw proberen");
+  toonGpsBalk("err","Locatie is geblokkeerd","De browser mag je positie niet gebruiken.","Wat nu?",gpsHulpModal);
+  vulDiagnose();
   // Staat de app op het beginscherm, dan is er geen adresbalk en dus geen slotje om aan te
   // tikken: die route bestaat alleen in de browser. Verwijs dan naar de app-instellingen.
   const opBeginscherm = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone===true;
@@ -588,7 +708,9 @@ function meldGeweigerd(){
 }
 function onPos(p){
   clearTimeout(gpsWatchdog); gpsWatchdog=null;
-  toonGpsHerstel(false);
+  clearTimeout(gpsVraagTimer); gpsVraagTimer=null;
+  gpsFixen++; gpsFout=null;
+  toonGpsHerstel(false); toonGpsBalk(null);
   if(S.sim) return;
   const c=p.coords;
   prevPos=pos;
@@ -599,8 +721,12 @@ function onPos(p){
   updateGpsBadge(c.accuracy);
   render(); onAnchorFix();
   if(map && !mapCentered){ map.setView([pos.lat,pos.lon],12); mapCentered=true; }
+  vulDiagnose();
 }
 function onErr(e){
+  gpsFout="code "+e.code+" ("+(e.code===1?"geweigerd":e.code===2?"geen positie beschikbaar":"te traag")+")"+
+          (e.message?" — "+e.message:"");
+  vulDiagnose();
   if(e.code===1){   // geweigerd: watchPosition levert hierna niets meer, dus opruimen
     if(watchId!=null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
     clearTimeout(gpsWatchdog); gpsWatchdog=null;
@@ -609,6 +735,30 @@ function onErr(e){
   // code 2 (geen fix) en 3 (te traag): de browser blijft zelf doorzoeken, dus alleen status
   if(!pos) setGpsTekst(e.code===3?"Zoekt… (traag)":"Geen fix");
   updateGpsBadge(pos?pos.acc:null);
+}
+/* Wat de browser er zélf van zegt. Zonder dit blijft "het werkt niet" een raadspelletje:
+ * dit is de enige plek waar zichtbaar wordt of het aan de verbinding ligt, aan de
+ * toestemming, aan de ontvangst of aan de app. */
+function gpsDiagnose(){
+  const st=[];
+  const staat=(matchMedia&&matchMedia("(display-mode: standalone)").matches)||navigator.standalone===true;
+  st.push("MarifoonPilot "+APP_VERSIE);
+  st.push("adres:        "+location.origin+location.pathname);
+  st.push("beveiligd:    "+(window.isSecureContext?"ja":"NEE — geolocation werkt niet"));
+  st.push("geolocation:  "+(gpsBruikbaar()?"bruikbaar":"ONBRUIKBAAR"));
+  st.push("toestemming:  "+(gpsPermStatus||"onbekend (browser meldt het niet)"));
+  st.push("weergave:     "+(staat?"op beginscherm (PWA)":"in de browser"));
+  const wv=inAppBrowser(); if(wv) st.push("LET OP:       "+wv+" — geeft meestal geen locatie");
+  st.push("pogingen:     "+gpsPogingen);
+  st.push("posities:     "+gpsFixen+(pos?" (laatste ±"+Math.round(pos.acc||0)+" m)":""));
+  st.push("laatste fout: "+(gpsFout||"geen"));
+  st.push("app-fout:     "+(jsFout||"geen"));
+  st.push("simulatie:    "+(S.sim?"AAN — de app gebruikt geen echte GPS":"uit"));
+  st.push("browser:      "+(navigator.userAgent||"?"));
+  return st.join(String.fromCharCode(10));
+}
+function vulDiagnose(){
+  const el=$("gpsDiag"); if(el) el.textContent=gpsDiagnose();
 }
 function updateGpsBadge(acc){
   const dot=$("gdot"), info=$("gpsInfo");
@@ -2074,11 +2224,19 @@ async function tryAutoDepth(){
 }
 
 /* ---------------- Navigatie ---------------- */
+/* Kopiëren kan mislukken (geen toestemming, oude browser). Dan tonen we de tekst gewoon,
+ * zodat hij alsnog met de hand te selecteren is. */
+function toonDiagVal(t){
+  const veilig=t.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  openModal('<h3>GPS-diagnose</h3><pre class="diag" style="margin:0 0 12px">'+veilig+
+            '</pre><button class="ok" onclick="closeModal()">Sluiten</button>');
+}
 function showView(v){
   document.querySelectorAll(".view").forEach(el=>el.classList.remove("active"));
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===v));
   $("view-"+v).classList.add("active");
   document.body.classList.toggle("opkaart", v==="map");
+  if(v==="set") vulDiagnose();
   if(v==="map" && map) setTimeout(()=>{ map.invalidateSize(); syncKaartKop(); if(pos) map.setView([pos.lat,pos.lon]); },80);
 }
 
@@ -2252,7 +2410,10 @@ function registerSW(){
   navigator.serviceWorker.addEventListener("controllerchange",()=>{
     if(swReloading) return; swReloading=true; location.reload();
   });
-  navigator.serviceWorker.register("sw.js").then(reg=>{
+  // updateViaCache:"none" — de browser mag sw.js zélf niet uit zijn cache halen. Anders kan
+  // een nieuwe versie tot de cache verloopt onzichtbaar blijven, en dat is precies het soort
+  // stilte waar je bij een kapotte versie niet uit komt.
+  navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(reg=>{
     swReg=reg;
     const check=()=>{ if(reg.waiting && navigator.serviceWorker.controller) promptReload(); };
     check();
@@ -2272,6 +2433,14 @@ window.addEventListener("DOMContentLoaded",()=>{
 
   document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.view)));
   const fix=$("btnGpsFix"); if(fix) fix.addEventListener("click",()=>startGPS(true));
+  $("gpsBarBtn").addEventListener("click",()=>{ if(gpsBalkActie) gpsBalkActie(); });
+  $("btnDiagTest").addEventListener("click",()=>{ startGPS(true); setTimeout(vulDiagnose,1200); });
+  $("btnDiagKopie").addEventListener("click",()=>{
+    const t=gpsDiagnose();
+    const klaar=()=>showToast("📋","Diagnose gekopieerd","Plak hem in een bericht als je hulp vraagt.",{});
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(klaar).catch(()=>toonDiagVal(t));
+    else toonDiagVal(t);
+  });
   $("btnSim").addEventListener("click",()=>{ $("setSim").checked=true; S.sim=true; save(); document.body.classList.toggle("sim",true);
     if(watchId!=null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
     updateGpsBadge(null); showView("map"); showToast("🧭","Simulatie aan","Tik op de kaart om je positie te kiezen.",{}); });

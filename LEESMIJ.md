@@ -4,6 +4,42 @@ Een GPS-vaarassistent die **automatisch het juiste marifoonkanaal** adviseert op
 Markermeer en de Waddenzee — op basis van je **positie én vaarrichting**. Werkt als **PWA** op
 **telefoon, tablet én laptop**, zónder app store, en altijd schermvullend.
 
+
+## 5.2 — waarom Android niets vroeg
+
+De vorige versie startte de locatie vanzelf op, en dat is precies waar het mis kon gaan:
+**een browser mag een locatievraag die niet uit een tik voortkomt stil afhandelen.** Chrome
+doet dat ook: geen venster, geen foutmelding, niets. En is de vraag eerder een paar keer
+weggetikt, dan zet Chrome de site op een zwarte lijst en komt er nooit meer een venster.
+Voor de schipper ziet dat er identiek uit als een kapotte app.
+
+Wat er nu gebeurt:
+
+- 🔔 **Blijft het 3,5 seconde stil, dan zet de app er zelf een knop neer.** Een verzoek ná
+  een tik wordt niet weggemoffeld — dat is de enige manier om een echt venster af te dwingen.
+  Blijft het ná die tik óók stil (8 s), dan is de vraag geblokkeerd en zegt de app dat, met
+  de weg naar de instelling erbij.
+- 🧭 **Vier oorzaken worden nu uit elkaar gehouden**: geen beveiligde verbinding, een
+  onbruikbare locatievoorziening, een geweigerde toestemming, en gewoon nog geen fix. Alleen
+  de laatste is een kwestie van wachten.
+- 📱 **Mini-browsers worden herkend.** Een link in WhatsApp, Gmail of Facebook opent in een
+  ingebouwde WebView die de locatievraag nooit doorgeeft. De app herkent dat aan de browser
+  en zegt: open hem in Chrome.
+- 🩺 **Instellingen → GPS-diagnose** toont wat de browser zélf meldt: adres, beveiligde
+  context, toestemming, aantal pogingen en posities, de laatste fout, en of de app in de
+  browser of vanaf het beginscherm draait. Met een kopieerknop. Zonder dat blijft
+  "het werkt niet" giswerk.
+- 🛟 **Een fout in de app maakt zichzelf zichtbaar** in plaats van alles stil te laten
+  sterven, en een onbruikbare `geolocation` laat de app niet meer vastlopen.
+- ♻️ **Updates komen betrouwbaar aan**: de service worker wordt niet meer uit de
+  browsercache gehaald en haalt de app-bestanden vers op. Tijdens het testen bleek een oude
+  cache hardnekkig genoeg om een nieuwe versie onzichtbaar te houden.
+
+Getest met een nagebootste browser in alle standen die op een Android voorkomen: toestemming
+verleend, stil gebleven, geweigerd (zowel via de foutcode als vooraf), geen fix, te traag,
+geen bruikbare API, WebView, simulatie, en toestemming die later alsnog binnenkomt — plus
+het volledige routespoor als regressie.
+
 ## Nieuw in v5.1 — GPS staat meteen aan, en je kiest zelf waar de route begint
 
 - 📡 **Geen "GPS starten" meer.** De app vraagt de locatie zodra hij opent; dat is ook het

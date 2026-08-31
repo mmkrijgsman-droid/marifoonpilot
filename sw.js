@@ -3,10 +3,10 @@
 // NIET zelf TILE_HOSTS declareren: config.js doet dat met const, en twee declaraties in
 // dezelfde global scope laten importScripts stilletjes falen.
 const HOST_FALLBACK = ["tile.openstreetmap.org", "tiles.openseamap.org", "server.arcgisonline.com"];
-try { importScripts("config.js?v=5.1.0"); } catch (e) { console.warn("sw: config.js niet geladen", e); }
+try { importScripts("config.js?v=5.2.0"); } catch (e) { console.warn("sw: config.js niet geladen", e); }
 const HOSTS = (typeof TILE_HOSTS !== "undefined" && Array.isArray(TILE_HOSTS)) ? TILE_HOSTS : HOST_FALLBACK;
 
-const VERSION = "mp2-v5.1.0";
+const VERSION = "mp2-v5.2.0";
 const SHELL = "shell-" + VERSION;
 const TILES = "tiles-" + VERSION;
 // Dieptetegels apart: die worden pas tijdens het varen opgehaald en mogen de app-shell
@@ -16,8 +16,8 @@ const DEPTH = "depth-" + VERSION;
 
 const SHELL_FILES = [
   // app.js/data.js met dezelfde ?v= als in index.html, anders cachet de SW een andere URL
-  "./", "./index.html", "./config.js?v=5.1.0", "./app.js?v=5.1.0", "./data.js?v=5.1.0",
-  "./vhf-points.js?v=5.1.0", "./fairway-depths.js?v=5.1.0", "./obstacles.js?v=5.1.0", "./stations.js?v=5.1.0", "./manifest.webmanifest",
+  "./", "./index.html", "./config.js?v=5.2.0", "./app.js?v=5.2.0", "./data.js?v=5.2.0",
+  "./vhf-points.js?v=5.2.0", "./fairway-depths.js?v=5.2.0", "./obstacles.js?v=5.2.0", "./stations.js?v=5.2.0", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-180.png",
   "./vendor/leaflet/leaflet.js", "./vendor/leaflet/leaflet.css",
   "./vendor/leaflet/images/marker-icon.png", "./vendor/leaflet/images/marker-shadow.png",
@@ -28,7 +28,13 @@ self.addEventListener("install", e => {
   // Bewust GEEN skipWaiting(): een nieuwe versie blijft wachten tot de gebruiker akkoord
   // gaat. Zo wisselt de app niet onder je handen van versie terwijl je vaart, en kan de
   // app betrouwbaar zien dat er een update klaarstaat (registration.waiting).
-  e.waitUntil(caches.open(SHELL).then(c => c.addAll(SHELL_FILES).catch(()=>{})));
+  // cache:"reload" — de app-bestanden vers van de server halen, niet uit de HTTP-cache van
+  // de browser. index.html heeft geen ?v= en zou anders in een oude versie kunnen blijven
+  // hangen terwijl de service worker zelf al nieuw is.
+  e.waitUntil(caches.open(SHELL).then(c => Promise.all(
+    SHELL_FILES.map(u => fetch(new Request(u, {cache: "reload"}))
+      .then(r => r.ok ? c.put(u, r) : null).catch(()=>{}))
+  )));
 });
 // De app vraagt om over te schakelen zodra de gebruiker op OK tikt.
 self.addEventListener("message", e => {

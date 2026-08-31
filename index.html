@@ -425,6 +425,26 @@
   #toast .tt .p{font-size:14px;margin-top:2px;line-height:1.35}
   #toast button{background:rgba(255,255,255,.22);border:0;color:inherit;font-weight:800;border-radius:10px;padding:8px 12px;font-size:14px}
 
+/* Locatiebalk onder de koptekst. Staat er alleen als er iets te dóen valt. Chrome kan een
+   * locatievraag die niet uit een tik voortkomt stil wegmoffelen (of na een paar keer
+   * wegtikken helemaal blokkeren); dan gebeurt er niets en zit de schipper met een dode
+   * app. Deze balk maakt van die stilte één duidelijke tik die wél een echte vraag geeft. */
+  .gpsbar{display:none;align-items:center;gap:10px;padding:9px 12px;flex:0 0 auto;
+    background:rgba(255,206,107,.10);border-bottom:1px solid rgba(255,206,107,.30)}
+  .gpsbar.show{display:flex}
+  .gpsbar.err{background:rgba(255,107,107,.10);border-bottom-color:rgba(255,107,107,.35)}
+  .gb-i{width:20px;height:20px;flex:0 0 auto;fill:none;stroke:var(--warn);stroke-width:1.8;
+    stroke-linecap:round;stroke-linejoin:round}
+  .gpsbar.err .gb-i{stroke:#ff8f8f}
+  .gb-tx{flex:1;min-width:0}
+  .gb-t{display:block;font-size:13.5px;font-weight:800;color:var(--fg)}
+  .gb-s{display:block;font-size:11.5px;color:var(--muted);line-height:1.35}
+  .gb-btn{flex:0 0 auto;border:0;border-radius:11px;padding:10px 15px;font-size:14px;font-weight:800;
+    background:var(--accent);color:#00222c;min-height:44px}
+  .diag{margin:0 14px 12px;padding:10px;background:#0a1622;border:1px solid var(--line);
+    border-radius:10px;color:#9db4cf;font-size:11.5px;line-height:1.55;white-space:pre-wrap;
+    word-break:break-word;font-family:ui-monospace,Menlo,Consolas,monospace}
+
   /* ---------- Modal / dialog ---------- */
   .modal{position:fixed;inset:0;z-index:1500;background:rgba(0,6,12,.85);display:none;align-items:center;justify-content:center;padding:18px}
   .modal.show{display:flex}
@@ -503,6 +523,12 @@
       <button class="iconbtn" id="btnFs" title="Volledig scherm">⛶</button>
     </div>
   </header>
+
+  <div class="gpsbar" id="gpsBar">
+    <svg class="gb-i" viewBox="0 0 24 24"><path d="M12 21.5 C12 21.5 18.5 15.3 18.5 10.5 a6.5 6.5 0 1 0 -13 0 C5.5 15.3 12 21.5 12 21.5 Z"/><circle cx="12" cy="10.2" r="2.4"/></svg>
+    <span class="gb-tx"><span class="gb-t" id="gpsBarT">Locatie nog niet toegestaan</span><span class="gb-s" id="gpsBarS">Tik op Toestaan — dan vraagt de browser het alsnog.</span></span>
+    <button class="gb-btn" id="gpsBarBtn">Toestaan</button>
+  </div>
 
   <main>
     <!-- VAREN -->
@@ -744,7 +770,17 @@
         <div class="set"><div><div class="lab">Over &amp; installeren</div><div class="sub">Uitleg, bronnen, installeren op je toestel.</div></div>
           <button class="filebtn" id="btnAbout" style="font-weight:800">Open</button></div>
       </div>
-      <div class="hint">Versie 5.1.0 · GPS start vanzelf · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
+      <h2 class="sec">GPS-diagnose</h2>
+      <div class="card">
+        <div class="set"><div><div class="lab">Wat de browser zelf zegt</div><div class="sub">Doet de locatie het niet, dan staat hier waaróm. Kopieer en stuur door als je er niet uit komt.</div></div></div>
+        <pre class="diag" id="gpsDiag">–</pre>
+        <div style="padding:0 14px 12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="start-btn" id="btnDiagTest">Locatie nu opvragen</button>
+          <button class="start-btn" id="btnDiagKopie">Kopieer</button>
+        </div>
+      </div>
+
+      <div class="hint">Versie 5.2.0 · GPS start vanzelf · locatie-diagnose · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
     </section>
   </main>
 
@@ -769,12 +805,12 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <!-- ?v= meeverhogen bij elke release: garandeert dat browsers de nieuwe JS pakken
      en niet een oude versie uit hun HTTP-cache blijven serveren. -->
-<script src="config.js?v=5.1.0"></script>
-<script src="data.js?v=5.1.0"></script>
-<script src="vhf-points.js?v=5.1.0"></script>
-<script src="fairway-depths.js?v=5.1.0"></script>
-<script src="obstacles.js?v=5.1.0"></script>
-<script src="stations.js?v=5.1.0"></script>
-<script src="app.js?v=5.1.0"></script>
+<script src="config.js?v=5.2.0"></script>
+<script src="data.js?v=5.2.0"></script>
+<script src="vhf-points.js?v=5.2.0"></script>
+<script src="fairway-depths.js?v=5.2.0"></script>
+<script src="obstacles.js?v=5.2.0"></script>
+<script src="stations.js?v=5.2.0"></script>
+<script src="app.js?v=5.2.0"></script>
 </body>
 </html>
