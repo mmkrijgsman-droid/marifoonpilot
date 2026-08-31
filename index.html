@@ -474,6 +474,59 @@
     border-radius:10px;color:#9db4cf;font-size:11.5px;line-height:1.55;white-space:pre-wrap;
     word-break:break-word;font-family:ui-monospace,Menlo,Consolas,monospace}
 
+/* Startscherm. Geen versiering: het dekt de koude start af (kaart opbouwen, tegels,
+   * eerste fix) die er tóch is, en het is de eerste plek waar een tik kan vallen — en een
+   * locatieverzoek ná een tik wordt door geen enkele browser weggemoffeld.
+   * Harde regel: hij verdwijnt zodra de app klaar is en hoe dan ook na 3,5 seconde. */
+  .splash{position:fixed;inset:0;z-index:3000;background:#071A2A;color:#fff;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    transition:opacity .38s ease}
+  .splash.weg{opacity:0;pointer-events:none}
+  .sp-merk{width:min(38vw,150px);height:min(38vw,150px);color:#fff}
+  .sp-naam{font-size:calc(23px * var(--tui));font-weight:800;letter-spacing:6px;
+    margin-top:calc(14px * var(--tui));padding-left:6px;
+    opacity:0;animation:spNaam .5s ease 1.15s forwards}
+  .sp-status{font-size:calc(12.5px * var(--tui));color:#8fa8ba;font-weight:600;
+    margin-top:calc(6px * var(--tui));min-height:1.4em;text-align:center;padding:0 24px;
+    opacity:0;animation:spNaam .5s ease 1.4s forwards}
+  .sp-knop{margin-top:calc(16px * var(--tui));border:0;border-radius:12px;
+    background:var(--teal);color:#052b2b;font-weight:800;
+    font-size:calc(15px * var(--tui));padding:calc(12px * var(--tui)) calc(20px * var(--tui));
+    min-height:46px;animation:spNaam .35s ease forwards}
+  .sp-over{margin-top:calc(10px * var(--tui));background:none;border:0;color:#7d94a6;
+    font-size:calc(12.5px * var(--tui));font-weight:700;text-decoration:underline;padding:8px}
+  /* De ring tekent zichzelf, het baken ploft erbij, dán komt de naald van linksonder
+     aanvliegen, en pas als hij het baken raakt verschijnen de twee signaalbogen — eerst
+     de kleine, dan de grote. Alles samen 1,55 s: kort genoeg om de koude start af te
+     dekken in plaats van hem te verlengen. De zachte puls daarna zegt "nog aan het
+     zoeken" en stopt zodra er een positie is.
+     pathLength=100 maakt de streeplengte onafhankelijk van de vorm van de ring. */
+  .sp-ring{stroke-dasharray:100;stroke-dashoffset:100;animation:spRing .6s ease-out .05s forwards}
+  .sp-baken{opacity:0;transform-box:view-box;transform-origin:35.4px 12.6px;
+    animation:spBaken .34s cubic-bezier(.2,1.4,.4,1) .5s forwards}
+  .sp-pijl{opacity:0;transform-box:view-box;transform-origin:24px 24px;
+    animation:spVlieg .62s cubic-bezier(.22,.75,.3,1) .6s forwards}
+  .sp-boog{opacity:0;transform-box:view-box;transform-origin:35.4px 12.6px;
+    animation:spBoogIn .24s ease-out 1.22s forwards, spPuls 1.9s ease-in-out 1.9s infinite}
+  .sp-boog2{animation-delay:1.35s, 2.05s}
+  @keyframes spRing{to{stroke-dashoffset:0}}
+  @keyframes spBaken{from{opacity:0;transform:scale(.25)}to{opacity:1;transform:scale(1)}}
+  .splash.gevonden .sp-boog{animation:spBoogIn .26s ease-out forwards}
+  @keyframes spVlieg{
+    0%{opacity:0;transform:translate(-34px,34px) scale(.68)}
+    16%{opacity:1}
+    62%{transform:translate(-8.5px,8.5px) scale(.95)}
+    86%{transform:translate(1.6px,-1.6px) scale(1.03)}
+    100%{opacity:1;transform:translate(0,0) scale(1)}}
+  @keyframes spBoogIn{from{opacity:0;transform:scale(.55)}to{opacity:1;transform:scale(1)}}
+  @keyframes spPuls{0%{opacity:1}42%{opacity:.35}100%{opacity:1}}
+  @keyframes spNaam{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  /* Wie beweging heeft uitgezet krijgt hetzelfde beeld, stil. */
+  @media (prefers-reduced-motion:reduce){
+    .sp-ring,.sp-baken,.sp-pijl,.sp-boog,.sp-naam,.sp-status,.sp-knop{
+      animation:none;opacity:1;transform:none;stroke-dashoffset:0}
+  }
+
   /* ---------- Modal / dialog ---------- */
   .modal{position:fixed;inset:0;z-index:1500;background:rgba(0,6,12,.85);display:none;align-items:center;justify-content:center;padding:18px}
   .modal.show{display:flex}
@@ -560,6 +613,26 @@
 </style>
 </head>
 <body>
+<div class="splash" id="splash">
+  <svg class="sp-merk" viewBox="0 0 48 48" aria-hidden="true">
+    <path class="sp-ring" pathLength="100" d="M30.6 8.4 A17 17 0 1 0 39.6 21.8"
+          fill="none" stroke="currentColor" stroke-width="3.8" stroke-linecap="round"/>
+    <g class="sp-pijl">
+      <path d="M33.2 14.8 L13.4 24.8 L20.4 27.6 Z" fill="#00B7B5"/>
+      <path d="M33.2 14.8 L23.2 34.6 L20.4 27.6 Z" fill="currentColor"/>
+    </g>
+    <g transform="rotate(-45 35.4 12.6)">
+      <path class="sp-boog" d="M39.6 8.6 a5.9 5.9 0 0 1 0 8" fill="none" stroke="#00B7B5" stroke-width="2.7" stroke-linecap="round"/>
+      <path class="sp-boog sp-boog2" d="M43.4 4.8 a11.4 11.4 0 0 1 0 15.6" fill="none" stroke="#00B7B5" stroke-width="2.7" stroke-linecap="round"/>
+    </g>
+    <circle class="sp-baken" cx="35.4" cy="12.6" r="3.2" fill="#FFB020"/>
+  </svg>
+  <div class="sp-naam">NAVIQ</div>
+  <div class="sp-status" id="spStatus">Even klaarzetten…</div>
+  <button class="sp-knop" id="spKnop" hidden>Locatie toestaan</button>
+  <button class="sp-over" id="spOver" hidden>Overslaan</button>
+</div>
+
 <div id="app">
   <header id="topbar">
     <div class="brand">
@@ -835,7 +908,7 @@
         </div>
       </div>
 
-      <div class="hint">Versie 5.3.0 · nieuwe naam en huisstijl · GPS start vanzelf · locatie-diagnose · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
+      <div class="hint">Versie 5.4.0 · nieuwe naam en huisstijl · startscherm · GPS start vanzelf · locatie-diagnose · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
     </section>
   </main>
 
@@ -860,12 +933,12 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <!-- ?v= meeverhogen bij elke release: garandeert dat browsers de nieuwe JS pakken
      en niet een oude versie uit hun HTTP-cache blijven serveren. -->
-<script src="config.js?v=5.3.0"></script>
-<script src="data.js?v=5.3.0"></script>
-<script src="vhf-points.js?v=5.3.0"></script>
-<script src="fairway-depths.js?v=5.3.0"></script>
-<script src="obstacles.js?v=5.3.0"></script>
-<script src="stations.js?v=5.3.0"></script>
-<script src="app.js?v=5.3.0"></script>
+<script src="config.js?v=5.4.0"></script>
+<script src="data.js?v=5.4.0"></script>
+<script src="vhf-points.js?v=5.4.0"></script>
+<script src="fairway-depths.js?v=5.4.0"></script>
+<script src="obstacles.js?v=5.4.0"></script>
+<script src="stations.js?v=5.4.0"></script>
+<script src="app.js?v=5.4.0"></script>
 </body>
 </html>

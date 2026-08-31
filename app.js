@@ -1,7 +1,7 @@
 /* NAVIQ v2 – applicatielogica */
 "use strict";
 
-const APP_VERSIE = "5.3.0";
+const APP_VERSIE = "5.4.0";
 
 /* Een fout in de opstart laat de app stil doodgaan: je ziet een scherm dat niets doet en
  * je hebt geen idee waarom. Daarom vangen we ze op en zetten ze in de diagnose (en, als de
@@ -379,6 +379,37 @@ function geenDiepteNoot(){
   return "geen loding";
 }
 
+/* ---------------- Startscherm ----------------
+ * Het dekt de koude start af: kaart opbouwen, tegels, en vooral de eerste GPS-fix, die
+ * nu eenmaal seconden duurt. Drie afspraken die het van versiering onderscheiden:
+ *   - hij verdwijnt zodra de app er echt klaar voor is, niet als de animatie toevallig af is;
+ *   - hij houdt nooit vast: na 3,5 s gaat hij weg, wat er ook gebeurt;
+ *   - de statusregel liegt niet. Staat de locatie nog te wachten op toestemming, dan komt
+ *     daar een knop, want die tik is precies het gebaar dat een browser nodig heeft.
+ * De ondergrond is dezelfde inktkleur als het Android-startscherm uit het manifest, zodat
+ * het één beweging lijkt in plaats van twee schermen.                                    */
+let splashWeg=false, splashStart=Date.now();
+const SPLASH_MIN=1600, SPLASH_MAX=3800;   // 1,55 s animatie moet af kunnen
+function splashStatus(t){ const e=$("spStatus"); if(e && !splashWeg) e.textContent=t; }
+function verbergSplash(){
+  if(splashWeg) return;
+  const rest=Math.max(0, SPLASH_MIN-(Date.now()-splashStart));
+  if(rest){ setTimeout(verbergSplash, rest); return; }   // niet flitsen als het snel ging
+  splashWeg=true;
+  const s=$("splash"); if(!s) return;
+  s.classList.add("weg");
+  setTimeout(()=>{ if(s.parentNode) s.parentNode.removeChild(s); if(map) try{ map.invalidateSize(); }catch(_){ } },420);
+}
+/* Wacht de browser op een tik voor de locatievraag, dan is dit de beste plek om hem te
+ * geven: het scherm staat er toch, en de vraag komt gegarandeerd in beeld. */
+function splashVraag(){
+  if(splashWeg || pos || S.sim) return;
+  if(gpsPermStatus==="granted" || gpsPermStatus==="denied" || gpsGeweigerd) return;
+  const k=$("spKnop"), o=$("spOver"); if(!k) return;
+  splashStatus("De browser vraagt nog niet om je locatie.");
+  k.hidden=false; if(o) o.hidden=false;
+}
+
 /* ---------------- Weergave ---------------- */
 function setState(level){
   // De tweede kleur is een zachte tint voor de koptekstband, niet de tekstkleur: op wit
@@ -611,6 +642,7 @@ function simBalk(){
  * positie negeerde. */
 function zetSim(on){
   S.sim=!!on; save();
+  if(on){ splashStatus("Simulatie"); verbergSplash(); }
   const cb=$("setSim"); if(cb) cb.checked=S.sim;
   document.body.classList.toggle("sim",S.sim);
   updateSimKnop();
@@ -678,6 +710,7 @@ function gpsHulpModal(){
 function startGPS(doorGebruiker){
   const blok=gpsBlokkade();
   if(blok){
+    splashStatus("Geen locatie mogelijk"); verbergSplash();
     setGpsTekst("Locatie geblokkeerd");
     showToast("⚠️","Geen locatie mogelijk",blok,{sticky:true,warn:true});
     toonGpsHerstel(true,"Opnieuw proberen");
@@ -734,6 +767,7 @@ function volgGpsPermissie(){
 }
 function meldGeweigerd(){
   gpsGeweigerd=true;
+  splashStatus("Locatie staat uit"); verbergSplash();
   clearTimeout(gpsVraagTimer); gpsVraagTimer=null;
   setGpsTekst("Locatie geweigerd");
   toonGpsHerstel(true,"Locatie opnieuw proberen");
@@ -751,6 +785,9 @@ function onPos(p){
   clearTimeout(gpsWatchdog); gpsWatchdog=null;
   clearTimeout(gpsVraagTimer); gpsVraagTimer=null;
   gpsFixen++; gpsFout=null;
+  splashStatus("Positie gevonden · ±"+Math.round(p.coords.accuracy||0)+" m");
+  { const sp=$("splash"); if(sp) sp.classList.add("gevonden"); }   // puls uit: er is een fix
+  verbergSplash();
   toonGpsHerstel(false);
   if(S.sim){ simBalk(); return; }   // simulatie wint: deze positie wordt niet gebruikt
   toonGpsBalk(null);
@@ -2527,7 +2564,13 @@ window.addEventListener("DOMContentLoaded",()=>{
   /* GPS hoort vanaf de start te lopen: op het water zet je geen knop meer aan.
    * Draait de simulatie, dan blijft de ontvanger uit — die positie komt van de kaart. */
   updateSimKnop();
-  if(S.sim){ updateGpsBadge(null); simBalk(); } else startGPS(false);
+  if(S.sim){ updateGpsBadge(null); simBalk(); splashStatus("Simulatie"); verbergSplash(); }
+  else { splashStatus("Positie zoeken…"); startGPS(false); }
+  const k=$("spKnop"), o=$("spOver");
+  if(k) k.addEventListener("click",()=>{ splashStatus("Positie zoeken…"); k.hidden=true; if(o) o.hidden=true; startGPS(true); });
+  if(o) o.addEventListener("click",verbergSplash);
+  setTimeout(splashVraag, 1300);        // pas vragen als de browser zijn kans heeft gehad
+  setTimeout(verbergSplash, SPLASH_MAX); // en nooit langer vasthouden dan dit
   /* De AudioContext mag pas open na een gebaar. Vroeger deed de startknop dat; nu die weg
    * is, doet de eerste tik of toetsaanslag het, anders blijft het kanaalalarm stil. */
   ["pointerdown","keydown"].forEach(ev=>document.addEventListener(ev,unlockAudio,{once:true}));

@@ -5,6 +5,35 @@ Markermeer en de Waddenzee — op basis van je **positie én vaarrichting**. Wer
 **telefoon, tablet én laptop**, zónder app store, en altijd schermvullend.
 
 
+
+## 5.4 — het startscherm
+
+Een startscherm dat alleen mooi is, is tijdverlies. Dit dekt werk af dat er tóch is: de
+kaart opbouwen, tegels ophalen en vooral de eerste GPS-fix, die op een koude start
+seconden duurt. In plaats van een half getekende app zie je het merk, en daarachter loopt
+alles al.
+
+Er zit een tweede reden onder. Een browser mag een locatieverzoek dat niet uit een tik
+voortkomt stil afhandelen — dat was precies de storing uit 5.2. Een verzoek ná een tik
+mag dat niet. Blijft het na 1,3 seconde stil, dan zet het startscherm daarom een knop
+**Locatie toestaan** neer: het scherm staat er toch, en die ene tik levert gegarandeerd
+een echte vraag op.
+
+Drie afspraken houden het eerlijk:
+
+- Hij verdwijnt zodra de app er écht klaar voor is, niet als de animatie toevallig af is.
+- Hij houdt nooit vast: na 3,8 seconde gaat hij weg, wat er ook gebeurt. Er staat ook een
+  **Overslaan** naast de knop.
+- De statusregel liegt niet. "Positie zoeken…" wordt "Positie gevonden · ±8 m", of
+  "Locatie staat uit", of "Simulatie". Geen nepvoortgangsbalk.
+
+De animatie duurt 1,55 s: de ring tekent zichzelf, het baken ploft erbij, de naald komt van
+linksonder aanvliegen, en pas als hij het baken raakt verschijnen de twee signaalbogen —
+eerst de kleine, dan de grote. Daarna pulseren ze zacht zolang er gezocht wordt; die puls
+stopt op het moment dat er een fix is. Wie beweging heeft uitgezet in zijn systeem krijgt
+hetzelfde beeld, stil. De ondergrond is dezelfde inktkleur als het Android-startscherm uit
+het manifest, zodat het één beweging lijkt in plaats van twee schermen.
+
 ## 5.2 — waarom Android niets vroeg
 
 De vorige versie startte de locatie vanzelf op, en dat is precies waar het mis kon gaan:
