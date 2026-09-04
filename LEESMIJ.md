@@ -6,6 +6,42 @@ Markermeer en de Waddenzee — op basis van je **positie én vaarrichting**. Wer
 
 
 
+
+## 5.5 — stroom in de routeplanner
+
+Je leest op de stroomschuifkaart één pijl af: waarheen loopt de stroom en hoe hard. Die
+waarde kun je nu invullen, en dan doet de app het rekenwerk dat je met een kaart in je hand
+niet even maakt: **hij ontbindt de stroom per routebeen.** Dezelfde stroom die in de Slenk
+meeloopt staat na de bocht dwars en in het volgende gat tegen. Per been wordt de component
+lángs de koers bij je vaart opgeteld of ervan afgetrokken, en de vaartijden worden per been
+opgeteld — niet één gemiddelde over de hele route.
+
+Bewust géén live databron. Voor een vertrekadvies telt of de stroom mee of tegen zit en
+wanneer hij kentert, niet of het 1,1 of 1,3 knoop is. Eén afgelezen waarde is daarvoor
+nauwkeurig genoeg en je kunt hem controleren; een getal uit een grofmazig model niet.
+Open-Meteo heeft stroming, maar op een rooster van 8 km — één cel is breder dan de hele
+Blauwe Slenk, en hun eigen documentatie zegt "not suitable for coastal navigation".
+
+Drie dingen die het eerlijk houden:
+
+- **Geen dubbeltelling.** Gemeten snelheid over de grond bevat de stroom al. De app rekent
+  eerst terug naar snelheid dóór het water met de component op het been waar je vaart, en
+  past de stroom daarna per been opnieuw toe. De planningssnelheid is al een
+  water-snelheid en blijft ongemoeid.
+- **Nauwelijks vooruit is een waarschuwing, geen getal.** Zakt je snelheid over de grond
+  onder 0,8 knoop, dan komt er een ⚠ bij in plaats van een stellig ogende aankomsttijd van
+  elf uur.
+- **De stroom kentert.** Duurt de tocht langer dan 2,5 uur, dan zegt de app dat één
+  afgelezen waarde daar niet meer voor geldt.
+
+Wat je ziet: bij het eindpunt staat `⚑ 1u54 · 1,2 kn mee`, en de aankomsttijd vertelt in
+zijn toelichting wat de stroom gemiddeld over de route doet en welke waarde je invulde.
+
+Nagerekend tegen handberekeningen: 10 km pal oost bij 4,5 kn is 71,9 min zonder stroom,
+58,8 met 1 kn mee, 92,5 met 1 kn tegen, en onveranderd bij stroom dwars — precies wat
+cos(hoek) hoort te geven. Op een route van twee benen (oost, dan noord) met stroom naar
+90° komt er 130,8 min uit tegen 143,8 zonder: het eerste been mee, het tweede dwars.
+
 ## 5.4 — het startscherm
 
 Een startscherm dat alleen mooi is, is tijdverlies. Dit dekt werk af dat er tóch is: de

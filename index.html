@@ -863,6 +863,11 @@
         <div style="padding:0 14px 12px"><input type="range" id="planSpeedRange" min="2" max="15" step="0.5" value="4.5"></div>
         <div class="set"><div><div class="lab">Wachttijd per sluis/brug</div><div class="sub">Ligt er een sluis of brug op je routelijn die open moet, dan telt de app deze tijd op bij de reistijd — en schuiven ook de tijd-bolletjes ná dat object mee. Op 0 zetten schakelt het uit.</div></div><div class="rangeval" id="lockDelayVal">15 min</div></div>
         <div style="padding:0 14px 12px"><input type="range" id="lockDelayRange" min="0" max="60" step="5" value="15"></div>
+        <div class="set"><div><div class="lab">Stroom uit de atlas</div><div class="sub">Lees op je stroomschuifkaart af hoeveel stroom er staat en waarheen die loopt, en zet dat hier. De app ontbindt hem per routebeen: dezelfde stroom loopt op het ene been mee en staat op het volgende dwars. Op 0 rekent hij zonder stroom.</div></div><div class="rangeval" id="stroomKnVal">uit</div></div>
+        <div style="padding:0 14px 12px"><input type="range" id="stroomKnRange" min="0" max="4" step="0.1" value="0"></div>
+        <div class="set"><div><div class="lab">Stroomrichting — wáárheen</div><div class="sub">De kant waar de stroom naartoe loopt, zoals op de kaart. Vloed het gat in is een andere richting dan eb eruit; vul in wat geldt voor het uur waarin je vaart.</div></div><div class="rangeval" id="stroomRiVal">–</div></div>
+        <div style="padding:0 14px 12px"><input type="range" id="stroomRiRange" min="0" max="355" step="5" value="0"></div>
+        <div class="sub" style="padding:0 14px 12px;color:var(--muted)">⚠️ Dit is jouw afgelezen waarde, geen meting. Eén waarde geldt voor de hele route en de stroom kentert; bij tochten langer dan ~2,5 uur zegt de app dat erbij.</div>
         <div class="set"><div><div class="lab">Hoogte boven water</div><div class="sub">Hoogste punt van je boot (mast, antenne, bimini). Past dit + 0,5 m marge onder de doorvaarthoogte van een gesloten brug, dan vaar je er zó onderdoor en rekent de app géén wachttijd. Zolang dit niet is ingesteld gaat de app ervan uit dat élke brug open moet.</div></div><div class="rangeval" id="airDraftVal">niet ingesteld</div></div>
         <div style="padding:0 14px 12px"><input type="range" id="airDraftRange" min="1.5" max="25" step="0.1" value="4"></div>
         <div class="sub" style="padding:0 14px 12px;color:var(--muted)">⚠️ Doorvaarthoogtes gelden t.o.v. het streefpeil en wisselen met het waterpeil. Controleer altijd de Wateralmanak deel 2.</div>
@@ -921,7 +926,7 @@
         </div>
       </div>
 
-      <div class="hint">Versie 5.4.1 · nieuwe naam en huisstijl · startscherm · GPS start vanzelf · locatie-diagnose · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
+      <div class="hint">Versie 5.5.0 · stroom in de routeplanner · nieuwe naam en huisstijl · startscherm · GPS start vanzelf · locatie-diagnose · startpunt van de route zelf kiezen · nieuwe kaartweergave · wind op je route · AIS-scheepvaart · RWS-lodingen 20 m · landelijke vaarwegdieptes · landelijke VHF-punten · offline-capabel · telefoon · tablet · laptop</div>
     </section>
   </main>
 
@@ -946,12 +951,12 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <!-- ?v= meeverhogen bij elke release: garandeert dat browsers de nieuwe JS pakken
      en niet een oude versie uit hun HTTP-cache blijven serveren. -->
-<script src="config.js?v=5.4.1"></script>
-<script src="data.js?v=5.4.1"></script>
-<script src="vhf-points.js?v=5.4.1"></script>
-<script src="fairway-depths.js?v=5.4.1"></script>
-<script src="obstacles.js?v=5.4.1"></script>
-<script src="stations.js?v=5.4.1"></script>
-<script src="app.js?v=5.4.1"></script>
+<script src="config.js?v=5.5.0"></script>
+<script src="data.js?v=5.5.0"></script>
+<script src="vhf-points.js?v=5.5.0"></script>
+<script src="fairway-depths.js?v=5.5.0"></script>
+<script src="obstacles.js?v=5.5.0"></script>
+<script src="stations.js?v=5.5.0"></script>
+<script src="app.js?v=5.5.0"></script>
 </body>
 </html>

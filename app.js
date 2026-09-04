@@ -1,7 +1,7 @@
 /* NAVIQ v2 – applicatielogica */
 "use strict";
 
-const APP_VERSIE = "5.4.1";
+const APP_VERSIE = "5.5.0";
 
 /* Een fout in de opstart laat de app stil doodgaan: je ziet een scherm dat niets doet en
  * je hebt geen idee waarom. Daarom vangen we ze op en zetten ze in de diagnose (en, als de
@@ -24,6 +24,7 @@ const DEFAULTS = {
   draft:1.55, margin:0.4,
   anchorRadius:40, sim:false, seenIntro:false,
   predDots:true, predRings:false, planSpeed:4.5,  // vooruitblik: bolletjes, ringen, planningssnelheid (kn) bij stilliggen
+  stroomKn:0, stroomRi:0,                         // stroom uit de atlas: knopen (0 = uit) en richting waarheen (graden)
   lockDelay:15,                                   // extra minuten per sluis/brug die open moet
   airDraft:null,                                  // hoogte boven water (m); null = niet ingesteld → elke brug moet open
   baseLayer:null, overlays:{depth:true}, mapKeys:{}, vhfPoints:true, // kaartkeuze, overlays, landelijke VHF-punten
@@ -1794,6 +1795,62 @@ function predParams(){
   const count = Math.max(2, Math.min(12, Math.round(horizonMin/interval)));
   return { v, interval, count, usingPlan };
 }
+/* ---------------- Stroom uit de stroomatlas ----------------
+ * Je leest op de schuifkaart één pijl af: waarheen loopt de stroom en hoe hard. Op een
+ * route die draait werkt diezelfde stroom op elk been anders — in de Slenk mee, na de
+ * bocht dwars, in het volgende gat tegen. De koers van elk been kent de app, dus dat
+ * ontbinden hoort hier en niet in je hoofd.
+ *
+ * Bewust géén live databron: voor een vertrekadvies telt of de stroom mee of tegen zit en
+ * wanneer hij kentert, niet of het 1,1 of 1,3 knoop is. Eén afgelezen waarde is daarvoor
+ * nauwkeurig genoeg, en hij is te controleren — een getal uit een grofmazig model niet.
+ */
+function stroomMS(){ return S.stroomKn>0 ? S.stroomKn/1.94384 : 0; }
+/* Component van de stroom lángs een koers, in m/s. Positief = mee. `stroomRi` is de
+ * richting wáárheen de stroom loopt, zoals op de kaart en in de atlas. */
+function stroomLangs(koers){
+  const v=stroomMS(); if(!v) return 0;
+  return v*Math.cos(rad(S.stroomRi-koers));
+}
+/* Vaartijd over de route, been voor been, met de stroom erin verwerkt. Geeft ook terug
+ * wat de stroom nettó doet: een aankomsttijd zonder uitleg is niet te controleren. */
+function vaartijdOverRoute(path, vStw){
+  const uit={ min:0, comp:0, tegenstroom:false };
+  let gewogen=0, totaalM=0;
+  for(let i=0;i<path.length-1;i++){
+    const d=haversine(path[i][0],path[i][1],path[i+1][0],path[i+1][1]);
+    if(d<1) continue;
+    const koers=bearing(path[i][0],path[i][1],path[i+1][0],path[i+1][1]);
+    const c=stroomLangs(koers);
+    let vg=vStw+c;
+    // Zoveel stroom tegen dat je nauwelijks vooruitkomt. Rekenkundig klopt een
+    // aankomsttijd van elf uur, maar praktisch vaar je dat niet: dan hoort er een
+    // waarschuwing bij in plaats van een getal dat er stellig uitziet. De grens ligt
+    // op 0,8 knoop over de grond — daaronder ben je overgeleverd aan de eerste windvlaag.
+    if(vg<0.4){ uit.tegenstroom=true; if(vg<0.15) vg=0.15; }
+    uit.min += d/vg/60;
+    gewogen += c*d; totaalM += d;
+  }
+  uit.comp = totaalM ? gewogen/totaalM : 0;      // gemiddelde component over de route (m/s)
+  return uit;
+}
+/* Gemeten snelheid over de grond bevat de stroom al. Om hem per been opnieuw toe te
+ * passen moet je eerst terug naar snelheid dóór het water, anders tel je hem dubbel.
+ * De planningssnelheid is al een snelheid door het water; die blijft zoals hij is. */
+function snelheidDoorWater(P, path){
+  if(P.usingPlan || !stroomMS() || !path || path.length<2) return P.v;
+  const k0=bearing(path[0][0],path[0][1],path[1][0],path[1][1]);
+  return Math.max(0.15, P.v - stroomLangs(k0));
+}
+function kompasLetter(gr){
+  const l=["N","NNO","NO","ONO","O","OZO","ZO","ZZO","Z","ZZW","ZW","WZW","W","WNW","NW","NNW"];
+  return l[Math.round(((gr%360)+360)%360/22.5)%16];
+}
+function fmtStroom(comp){
+  const kn=Math.abs(comp)*1.94384;
+  if(kn<0.05) return "dwars";
+  return fmtKn(kn)+" kn "+(comp>0?"mee":"tegen");
+}
 function fmtMin(m){ m=Math.round(m); if(m<60) return m+"m"; return (m%60===0)?(m/60)+"u":Math.floor(m/60)+"u"+(m%60); }
 function fmtKn(n){ return fmtNum(n,1).replace(",0",""); }
 function timeDot(lat,lon,min,color){
@@ -1945,14 +2002,19 @@ function drawPrediction(){
   });
 
   if(S.wind && isRoute) haalWind();
-  const len=pathLength(path), sail=len/P.v/60;
+  const len=pathLength(path);
+  const vStw=snelheidDoorWater(P, path);
+  const vt=vaartijdOverRoute(path, vStw);
+  const sail=vt.min;
   const stops=obst.filter(o=>o.pass.wait), blocked=obst.filter(o=>o.pass.blocked);
   const onzeker=stops.filter(o=>o.pass.why==="doorvaarthoogte onbekend"||o.pass.why==="hoogte niet ingesteld");
   const wait=stops.length*S.lockDelay;
   if(isRoute){
     const end=path[path.length-1];
-    mapLabel(end[0],end[1],"⚑ "+fmtDur(sail+wait),"#ffd98a");
-    updatePredBadge(P, {len, sail, wait, stops:stops.length, blocked:blocked.length, onzeker:onzeker.length});
+    const stroomTekst = stroomMS() ? " · "+fmtStroom(vt.comp)+(vt.tegenstroom?" ⚠":"") : "";
+    mapLabel(end[0],end[1],"⚑ "+fmtDur(sail+wait)+stroomTekst,"#ffd98a");
+    updatePredBadge(P, {len, sail, wait, stops:stops.length, blocked:blocked.length, onzeker:onzeker.length,
+                        comp:vt.comp, tegenstroom:vt.tegenstroom, vStw});
     // Alleen melden als de set blokkades wijzigt — drawPrediction draait bij elke fix en kaartbeweging
     const bKey=blocked.map(o=>o.point.id).join(",");
     if(bKey!==lastBlockedKey){
@@ -1979,7 +2041,12 @@ function updatePredBadge(P, rt){
     const aan = new Date(Date.now() + min*60000);
     t.textContent = String(aan.getHours()).padStart(2,"0")+":"+String(aan.getMinutes()).padStart(2,"0");
     const stops = rt.stops ? ", incl. "+rt.stops+"× sluis/brug (+"+fmtDur(rt.wait)+")" : "";
-    if(t.parentElement) t.parentElement.title = "Aankomst over "+fmtDur(min)+stops;
+    const str = stroomMS()
+      ? " · stroom "+fmtStroom(rt.comp)+" (gemiddeld over de route, "+fmtKn(S.stroomKn)+" kn naar "+Math.round(S.stroomRi)+"°)"
+      : "";
+    const waarschuw = rt.tegenstroom ? " ⚠ op een deel van de route kom je nauwelijks vooruit tegen de stroom in" : "";
+    const kentert = (stroomMS() && min>150) ? " ⚠ langer dan de stroom staat: hij kentert onderweg" : "";
+    if(t.parentElement) t.parentElement.title = "Aankomst over "+fmtDur(min)+stops+str+waarschuw+kentert;
     if(a.parentElement) a.parentElement.title = "Lengte van de route";
     if(kaart) kaart.classList.add("metroute");
     syncKaartKop();
@@ -2441,6 +2508,13 @@ function initSettings(){
   bindToggle("setNotify","notify",on=>{ if(on&&"Notification" in window&&Notification.permission==="default") Notification.requestPermission(); });
   bindRange("planSpeedRange","planSpeedVal","planSpeed",v=>fmtKn(v)+" kn");
   bindRange("lockDelayRange","lockDelayVal","lockDelay",v=>v+" min");
+  // Stroom verandert de route-uitkomst, niet de positie: opnieuw tekenen, ook zonder fix.
+  bindRange("stroomKnRange","stroomKnVal","stroomKn",v=>v>0?fmtKn(v)+" kn":"uit");
+  bindRange("stroomRiRange","stroomRiVal","stroomRi",v=>S.stroomKn>0?Math.round(v)+"° "+kompasLetter(v):"–");
+  ["stroomKnRange","stroomRiRange"].forEach(id=>$(id).addEventListener("input",()=>{
+    $("stroomRiVal").textContent = S.stroomKn>0 ? Math.round(S.stroomRi)+"° "+kompasLetter(S.stroomRi) : "–";
+    drawPrediction();
+  }));
   bindAirDraft();
   bindPeil(); bindChartDatum();
   bindRange("draftRange","draftVal","draft",v=>fmtNum(v,2)+" m");
